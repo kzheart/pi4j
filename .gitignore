@@ -1,0 +1,14 @@
+.gradle/
+build/
+out/
+.idea/
+*.iml
+.DS_Store
+
+# AI workflow artifacts
+plan/
+issues/*.csv
+
+# local secrets
+.env
+*.env
