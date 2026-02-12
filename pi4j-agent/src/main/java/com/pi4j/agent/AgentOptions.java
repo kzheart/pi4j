@@ -19,6 +19,9 @@ public final class AgentOptions {
     private final MessageConverter convertToLlm;
     private final ContextTransformer transformContext;
     private final ApiKeyResolver getApiKey;
+    private final Double temperature;
+    private final Integer maxTokens;
+    private final String toolChoice;
     private final String steeringMode;
     private final String followUpMode;
 
@@ -31,6 +34,9 @@ public final class AgentOptions {
         this.convertToLlm = builder.convertToLlm;
         this.transformContext = builder.transformContext;
         this.getApiKey = builder.getApiKey;
+        this.temperature = builder.temperature;
+        this.maxTokens = builder.maxTokens;
+        this.toolChoice = builder.toolChoice;
         this.steeringMode = builder.steeringMode;
         this.followUpMode = builder.followUpMode;
     }
@@ -71,6 +77,18 @@ public final class AgentOptions {
         return getApiKey;
     }
 
+    public Double getTemperature() {
+        return temperature;
+    }
+
+    public Integer getMaxTokens() {
+        return maxTokens;
+    }
+
+    public String getToolChoice() {
+        return toolChoice;
+    }
+
     public String getSteeringMode() {
         return steeringMode;
     }
@@ -96,6 +114,9 @@ public final class AgentOptions {
         };
         private ContextTransformer transformContext = (messages, abortHandle) -> messages;
         private ApiKeyResolver getApiKey = provider -> System.getenv("DEEPSEEK_API_KEY");
+        private Double temperature;
+        private Integer maxTokens;
+        private String toolChoice;
         private String steeringMode = "all";
         private String followUpMode = "all";
 
@@ -136,6 +157,21 @@ public final class AgentOptions {
 
         public Builder getApiKey(ApiKeyResolver getApiKey) {
             this.getApiKey = getApiKey;
+            return this;
+        }
+
+        public Builder temperature(Double temperature) {
+            this.temperature = temperature;
+            return this;
+        }
+
+        public Builder maxTokens(Integer maxTokens) {
+            this.maxTokens = maxTokens;
+            return this;
+        }
+
+        public Builder toolChoice(String toolChoice) {
+            this.toolChoice = toolChoice;
             return this;
         }
 

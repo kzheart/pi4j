@@ -234,6 +234,9 @@ public class Agent {
                 StreamOptions streamOptions = StreamOptions.builder()
                         .apiKey(apiKey)
                         .reasoning(thinkingLevel)
+                        .temperature(options.getTemperature())
+                        .maxTokens(options.getMaxTokens())
+                        .toolChoice(options.getToolChoice())
                         .abortHandle(abortHandle)
                         .build();
 
