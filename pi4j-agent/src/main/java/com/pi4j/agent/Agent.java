@@ -43,11 +43,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 public class Agent {
     private final Object lock = new Object();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final CopyOnWriteArrayList<AgentEventListener> listeners = new CopyOnWriteArrayList<AgentEventListener>();
+    private final CopyOnWriteArrayList<Consumer<AgentState>> stateListeners = new CopyOnWriteArrayList<Consumer<AgentState>>();
     private final Queue<AgentMessage> steeringQueue = new ConcurrentLinkedQueue<AgentMessage>();
     private final Queue<AgentMessage> followUpQueue = new ConcurrentLinkedQueue<AgentMessage>();
 
@@ -97,24 +99,28 @@ public class Agent {
         synchronized (lock) {
             this.systemPrompt = prompt;
         }
+        fireState();
     }
 
     public void setModel(com.pi4j.ai.types.Model model) {
         synchronized (lock) {
             this.model = model;
         }
+        fireState();
     }
 
     public void setThinkingLevel(String level) {
         synchronized (lock) {
             this.thinkingLevel = level;
         }
+        fireState();
     }
 
     public void setTools(List<AgentTool> tools) {
         synchronized (lock) {
             this.tools = new ArrayList<AgentTool>(tools);
         }
+        fireState();
     }
 
     public void replaceMessages(List<AgentMessage> messages) {
@@ -122,18 +128,18 @@ public class Agent {
             this.messages.clear();
             this.messages.addAll(messages);
         }
+        fireState();
     }
 
     public void appendMessage(AgentMessage message) {
-        synchronized (lock) {
-            this.messages.add(message);
-        }
+        appendMessageInternal(message);
     }
 
     public void clearMessages() {
         synchronized (lock) {
             this.messages.clear();
         }
+        fireState();
     }
 
     public CompletableFuture<Void> prompt(String text) {
@@ -152,18 +158,24 @@ public class Agent {
     }
 
     public CompletableFuture<Void> prompt(List<AgentMessage> newMessages) {
+        CompletableFuture<Void> future;
         synchronized (lock) {
             ensureNotStreaming();
             messages.addAll(newMessages);
-            return startExecution();
+            future = startExecution();
         }
+        fireState();
+        return future;
     }
 
     public CompletableFuture<Void> continueExecution() {
+        CompletableFuture<Void> future;
         synchronized (lock) {
             ensureNotStreaming();
-            return startExecution();
+            future = startExecution();
         }
+        fireState();
+        return future;
     }
 
     public void abort() {
@@ -188,6 +200,7 @@ public class Agent {
             error = null;
             streamMessage = null;
         }
+        fireState();
     }
 
     public void steer(AgentMessage message) {
@@ -204,15 +217,23 @@ public class Agent {
         return () -> listeners.remove(listener);
     }
 
+    public Runnable subscribeState(Consumer<AgentState> listener) {
+        stateListeners.add(listener);
+        listener.accept(getState());
+        return () -> stateListeners.remove(listener);
+    }
+
     private CompletableFuture<Void> startExecution() {
         streaming = true;
         error = null;
         AbortHandle abortHandle = new AbortHandle();
         runningAbortHandle = abortHandle;
+        fireState();
         CompletableFuture<Void> future = CompletableFuture.runAsync(() -> executeLoop(abortHandle), executor);
         runningFuture = future.whenComplete((unused, throwable) -> {
             streaming = false;
             runningAbortHandle = null;
+            fireState();
         });
         return runningFuture;
     }
@@ -251,6 +272,7 @@ public class Agent {
                 AssistantMessage assistant = waitStream(responseStream);
                 LlmAgentMessage assistantMessage = new LlmAgentMessage(assistant);
                 streamMessage = assistantMessage;
+                fireState();
                 fire(new MessageStartEvent(assistantMessage));
                 appendMessageInternal(assistantMessage);
                 fire(new MessageEndEvent(assistantMessage));
@@ -286,10 +308,12 @@ public class Agent {
             fire(new AgentEndEvent(copyMessages()));
         } catch (Exception ex) {
             error = ex.getMessage();
+            fireState();
             throw new RuntimeException(ex);
         } finally {
             streamMessage = null;
             pendingToolCalls.clear();
+            fireState();
         }
     }
 
@@ -302,6 +326,7 @@ public class Agent {
         List<ToolResultMessage> results = new ArrayList<ToolResultMessage>();
         for (ToolCallContent toolCall : toolCalls) {
             pendingToolCalls.add(toolCall.getId());
+            fireState();
             AgentTool tool = findTool(toolCall.getName());
             Map<String, Object> validated;
             try {
@@ -317,6 +342,7 @@ public class Agent {
                 results.add(toolResultMessage);
                 fire(new ToolExecutionEndEvent(toolCall.getId(), toolCall.getName(), errorResult, true));
                 pendingToolCalls.remove(toolCall.getId());
+                fireState();
                 continue;
             }
 
@@ -349,6 +375,7 @@ public class Agent {
             }
 
             pendingToolCalls.remove(toolCall.getId());
+            fireState();
         }
         return results;
     }
@@ -399,6 +426,14 @@ public class Agent {
     private void appendMessageInternal(AgentMessage message) {
         synchronized (lock) {
             this.messages.add(message);
+        }
+        fireState();
+    }
+
+    private void fireState() {
+        AgentState snapshot = getState();
+        for (Consumer<AgentState> listener : stateListeners) {
+            listener.accept(snapshot);
         }
     }
 

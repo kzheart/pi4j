@@ -39,6 +39,7 @@ class AgentDeepSeekIntegrationTest {
     void agentWithoutToolsWorksOnDeepSeekOpenAiCompat() throws Exception {
         String apiKey = requireApiKey();
         ApiRegistry.register(new OpenAICompletionsProvider());
+        List<AgentState> states = new CopyOnWriteArrayList<AgentState>();
 
         Agent agent = new Agent(AgentOptions.builder()
                 .model(deepSeekOpenAiModel())
@@ -47,6 +48,7 @@ class AgentDeepSeekIntegrationTest {
                 .temperature(0.0)
                 .maxTokens(128)
                 .build());
+        agent.subscribeState(states::add);
 
         agent.prompt("请用一句话回复：OK").get(90, TimeUnit.SECONDS);
 
@@ -54,6 +56,8 @@ class AgentDeepSeekIntegrationTest {
         String assistantText = extractLatestAssistantText(messages);
 
         assertFalse(assistantText.trim().isEmpty());
+        assertTrue(sawStreamingState(states));
+        assertTrue(endedInIdleState(states));
     }
 
     @Test
@@ -113,6 +117,7 @@ class AgentDeepSeekIntegrationTest {
         boolean executedTool = false;
         for (int i = 0; i < 2 && !executedTool; i++) {
             List<AgentEvent> events = new CopyOnWriteArrayList<AgentEvent>();
+            List<AgentState> states = new CopyOnWriteArrayList<AgentState>();
             Agent agent = new Agent(AgentOptions.builder()
                     .model(deepSeekOpenAiModel())
                     .systemPrompt("你必须先调用工具完成计算，然后只输出最终答案。")
@@ -123,11 +128,15 @@ class AgentDeepSeekIntegrationTest {
                     .toolChoice("auto")
                     .build());
             agent.subscribe(events::add);
+            agent.subscribeState(states::add);
 
             agent.prompt("请调用 add_numbers 工具计算 19 + 23，最后只回复数字。")
                     .get(120, TimeUnit.SECONDS);
 
-            executedTool = hasToolExecution(events) || hasToolResult(agent.getState().getMessages());
+            executedTool = (hasToolExecution(events) || hasToolResult(agent.getState().getMessages()))
+                    && sawPendingToolCall(states)
+                    && sawStreamingState(states)
+                    && endedInIdleState(states);
         }
 
         assertTrue(executedTool);
@@ -192,5 +201,30 @@ class AgentDeepSeekIntegrationTest {
             }
         }
         return "";
+    }
+
+    private boolean sawStreamingState(List<AgentState> states) {
+        for (AgentState state : states) {
+            if (state.isStreaming()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean endedInIdleState(List<AgentState> states) {
+        if (states.isEmpty()) {
+            return false;
+        }
+        return !states.get(states.size() - 1).isStreaming();
+    }
+
+    private boolean sawPendingToolCall(List<AgentState> states) {
+        for (AgentState state : states) {
+            if (!state.getPendingToolCalls().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
