@@ -21,4 +21,7 @@ tasks.register<Test>("integrationTest") {
     classpath = integrationTestSourceSet.runtimeClasspath
     useJUnitPlatform()
     shouldRunAfter(tasks.named("test"))
+    testLogging {
+        showStandardStreams = true
+    }
 }
