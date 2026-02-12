@@ -34,4 +34,37 @@ class ApiRegistryTest {
 
         assertSame(provider, ApiRegistry.getProvider("demo"));
     }
+
+    @Test
+    void registerProviderWithApiAndProviderName() {
+        ApiProvider defaultProvider = new ApiProvider() {
+            @Override
+            public String getApi() {
+                return "openai-completions";
+            }
+
+            @Override
+            public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+                return new AssistantMessageEventStream();
+            }
+        };
+
+        ApiProvider mistralProvider = new ApiProvider() {
+            @Override
+            public String getApi() {
+                return "openai-completions";
+            }
+
+            @Override
+            public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+                return new AssistantMessageEventStream();
+            }
+        };
+
+        ApiRegistry.register(defaultProvider);
+        ApiRegistry.register("openai-completions", "mistral", mistralProvider);
+
+        assertSame(mistralProvider, ApiRegistry.getProvider("openai-completions", "mistral"));
+        assertSame(defaultProvider, ApiRegistry.getProvider("openai-completions", "openai"));
+    }
 }

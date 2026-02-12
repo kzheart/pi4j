@@ -27,12 +27,12 @@ public final class BuiltinProviderRegistry {
         ApiRegistry.register(new GoogleVertexProvider());
         ApiRegistry.register(new BedrockProvider());
 
-        // 以下兼容商Provider复用openai-completions协议。
-        new MistralProvider();
-        new GroqProvider();
-        new XAIProvider();
-        new OpenRouterProvider();
-        new OllamaProvider();
-        new CustomOpenAIProvider();
+        // 兼容商共享 openai-completions api，按 provider 名称路由。
+        ApiRegistry.register("openai-completions", "mistral", new MistralProvider());
+        ApiRegistry.register("openai-completions", "groq", new GroqProvider());
+        ApiRegistry.register("openai-completions", "xai", new XAIProvider());
+        ApiRegistry.register("openai-completions", "openrouter", new OpenRouterProvider());
+        ApiRegistry.register("openai-completions", "ollama", new OllamaProvider());
+        ApiRegistry.register("openai-completions", "custom-openai", new CustomOpenAIProvider());
     }
 }
