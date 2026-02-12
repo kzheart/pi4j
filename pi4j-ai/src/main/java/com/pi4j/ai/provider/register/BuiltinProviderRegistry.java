@@ -2,7 +2,6 @@ package com.pi4j.ai.provider.register;
 
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.anthropic.AnthropicProvider;
-import com.pi4j.ai.provider.bedrock.BedrockProvider;
 import com.pi4j.ai.provider.customopenai.CustomOpenAIProvider;
 import com.pi4j.ai.provider.google.GoogleProvider;
 import com.pi4j.ai.provider.google.GoogleVertexProvider;
@@ -25,7 +24,6 @@ public final class BuiltinProviderRegistry {
         ApiRegistry.register(new OpenAIResponsesProvider());
         ApiRegistry.register(new GoogleProvider());
         ApiRegistry.register(new GoogleVertexProvider());
-        ApiRegistry.register(new BedrockProvider());
 
         // 兼容商共享 openai-completions api，按 provider 名称路由。
         ApiRegistry.register("openai-completions", "mistral", new MistralProvider());
