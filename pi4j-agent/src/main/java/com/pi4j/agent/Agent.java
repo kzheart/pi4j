@@ -27,6 +27,8 @@ import com.pi4j.ai.types.Tool;
 import com.pi4j.ai.types.ToolCallContent;
 import com.pi4j.ai.types.ToolResultMessage;
 import com.pi4j.ai.types.UserMessage;
+import com.pi4j.ai.types.Usage;
+import com.pi4j.ai.types.StopReason;
 import com.pi4j.ai.util.ToolValidationException;
 import com.pi4j.ai.util.ToolValidator;
 import java.util.ArrayList;
@@ -211,6 +213,18 @@ public class Agent {
         followUpQueue.offer(message);
     }
 
+    public void clearSteeringQueue() {
+        steeringQueue.clear();
+    }
+
+    public void clearFollowUpQueue() {
+        followUpQueue.clear();
+    }
+
+    public boolean hasQueuedMessages() {
+        return !steeringQueue.isEmpty() || !followUpQueue.isEmpty();
+    }
+
     public Runnable subscribe(AgentEventListener listener) {
         listeners.add(listener);
         return () -> listeners.remove(listener);
@@ -342,9 +356,25 @@ public class Agent {
 
             fire(new AgentEndEvent(copyMessages()));
         } catch (Exception ex) {
-            error = ex.getMessage();
+            StopReason stopReason = abortHandle.isAborted() ? StopReason.ABORTED : StopReason.ERROR;
+            String errorMessage = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+            AssistantMessage failure = new AssistantMessage(
+                    Collections.<ContentBlock>singletonList(new TextContent("")),
+                    model.getApi(),
+                    model.getProvider(),
+                    model.getId(),
+                    new Usage(0, 0, 0, 0, 0, null),
+                    stopReason,
+                    errorMessage);
+            LlmAgentMessage failureMessage = new LlmAgentMessage(failure);
+            fire(new MessageStartEvent(failureMessage));
+            appendMessageInternal(failureMessage);
+            fire(new MessageEndEvent(failureMessage));
+            fire(new TurnEndEvent(failure, Collections.<ToolResultMessage>emptyList()));
+            fire(new AgentEndEvent(copyMessages()));
+
+            error = errorMessage;
             fireState();
-            throw new RuntimeException(ex);
         } finally {
             streamMessage = null;
             pendingToolCalls.clear();

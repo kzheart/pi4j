@@ -355,6 +355,54 @@ class AgentTest {
         assertEquals(1, skippedResults);
     }
 
+    @Test
+    void queueManagementApisWork() {
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .build());
+        agent.steer(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("s")))));
+        agent.followUp(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("f")))));
+        assertTrue(agent.hasQueuedMessages());
+
+        agent.clearSteeringQueue();
+        assertTrue(agent.hasQueuedMessages());
+
+        agent.clearFollowUpQueue();
+        assertFalse(agent.hasQueuedMessages());
+    }
+
+    @Test
+    void executionErrorCreatesAssistantErrorMessage() throws Exception {
+        ApiRegistry.register(new FailingProvider());
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.prompt("hello").get();
+
+        AssistantMessage last = lastAssistantMessage(agent.getState().getMessages());
+        assertEquals(StopReason.ERROR, last.getStopReason());
+        assertTrue(last.getErrorMessage().contains("boom"));
+    }
+
+    @Test
+    void abortCreatesAssistantAbortedMessage() throws Exception {
+        ApiRegistry.register(new BlockingProvider());
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        java.util.concurrent.CompletableFuture<Void> future = agent.prompt("hello");
+        Thread.sleep(30L);
+        agent.abort();
+        future.get();
+
+        AssistantMessage last = lastAssistantMessage(agent.getState().getMessages());
+        assertEquals(StopReason.ABORTED, last.getStopReason());
+    }
+
     private Model buildModel() {
         return new Model(
                 "demo",
@@ -380,6 +428,20 @@ class AgentTest {
             }
         }
         return count;
+    }
+
+    private AssistantMessage lastAssistantMessage(List<AgentMessage> messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            AgentMessage message = messages.get(i);
+            if (!(message instanceof LlmAgentMessage)) {
+                continue;
+            }
+            Message llm = ((LlmAgentMessage) message).getMessage();
+            if (llm instanceof AssistantMessage) {
+                return (AssistantMessage) llm;
+            }
+        }
+        throw new AssertionError("assistant message not found");
     }
 
     private static class StaticProvider implements ApiProvider {
@@ -508,6 +570,41 @@ class AgentTest {
             stream.push(new TextEndEvent(0));
             stream.push(new DoneEvent(StopReason.STOP, message));
             stream.end(message);
+            return stream;
+        }
+    }
+
+    private static final class FailingProvider implements ApiProvider {
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            throw new IllegalStateException("boom");
+        }
+    }
+
+    private static final class BlockingProvider implements ApiProvider {
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            AssistantMessageEventStream stream = new AssistantMessageEventStream();
+            AbortHandle abortHandle = options.getAbortHandle();
+            while (!abortHandle.isAborted()) {
+                try {
+                    Thread.sleep(5L);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            abortHandle.throwIfAborted();
             return stream;
         }
     }
