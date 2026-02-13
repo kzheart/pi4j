@@ -35,6 +35,17 @@ class ProviderCompatTest {
         assertTrue(compat.isSupportsReasoningEffort());
     }
 
+    @Test
+    void detectDeepSeekCompat() {
+        ProviderCompat.OpenAiCompletionsCompat compat = ProviderCompat.detectOpenAiCompletionsCompat(
+                model("deepseek", "https://api.deepseek.com"));
+        assertEquals("max_completion_tokens", compat.getMaxTokensField());
+        assertFalse(compat.isSupportsStore());
+        assertFalse(compat.isSupportsDeveloperRole());
+        assertTrue(compat.isSupportsReasoningEffort());
+        assertTrue(ProviderCompat.isOpenAiCompatible("deepseek"));
+    }
+
     private Model model(String provider, String baseUrl) {
         return new Model(
                 "demo",
