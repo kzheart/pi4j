@@ -41,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -234,33 +235,43 @@ public class OpenAIResponsesProvider implements ApiProvider {
                 list.add(entry);
             } else if (message instanceof AssistantMessage) {
                 AssistantMessage assistant = (AssistantMessage) message;
-                JsonObject entry = new JsonObject();
-                entry.addProperty("role", "assistant");
-                JsonArray content = new JsonArray();
                 for (ContentBlock block : assistant.getContent()) {
                     if (block instanceof TextContent) {
+                        String textValue = ((TextContent) block).getText();
+                        if (textValue == null || textValue.isEmpty()) {
+                            continue;
+                        }
+                        JsonObject outputMessage = new JsonObject();
+                        outputMessage.addProperty("type", "message");
+                        outputMessage.addProperty("role", "assistant");
+                        outputMessage.addProperty("status", "completed");
+                        JsonArray content = new JsonArray();
                         JsonObject text = new JsonObject();
                         text.addProperty("type", "output_text");
-                        text.addProperty("text", ((TextContent) block).getText());
+                        text.addProperty("text", textValue);
                         content.add(text);
+                        outputMessage.add("content", content);
+                        list.add(outputMessage);
                     } else if (block instanceof ToolCallContent) {
                         ToolCallContent toolCall = (ToolCallContent) block;
+                        ToolCallIds ids = splitToolCallIds(toolCall.getId());
                         JsonObject function = new JsonObject();
                         function.addProperty("type", "function_call");
-                        function.addProperty("id", toolCall.getId());
-                        function.addProperty("call_id", toolCall.getId());
+                        if (!ids.itemId.isEmpty()) {
+                            function.addProperty("id", ids.itemId);
+                        }
+                        function.addProperty("call_id", ids.callId);
                         function.addProperty("name", toolCall.getName());
                         function.addProperty("arguments", JsonUtil.gson().toJson(toolCall.getArguments()));
-                        content.add(function);
+                        list.add(function);
                     }
                 }
-                entry.add("content", content);
-                list.add(entry);
             } else if (message instanceof ToolResultMessage) {
                 ToolResultMessage toolResult = (ToolResultMessage) message;
+                ToolCallIds ids = splitToolCallIds(toolResult.getToolCallId());
                 JsonObject entry = new JsonObject();
                 entry.addProperty("type", "function_call_output");
-                entry.addProperty("call_id", toolResult.getToolCallId());
+                entry.addProperty("call_id", ids.callId);
                 entry.addProperty("output", flattenText(toolResult.getContent()));
                 list.add(entry);
             }
@@ -369,17 +380,20 @@ public class OpenAIResponsesProvider implements ApiProvider {
             if ("function_call".equals(getAsString(item, "type"))) {
                 String itemId = getAsString(item, "id");
                 String callId = getAsString(item, "call_id");
-                String key = callId.isEmpty() ? itemId : callId;
+                String key = primaryToolKey(callId, itemId);
                 ToolBuilder builder = state.tools.get(key);
                 if (builder == null) {
                     builder = new ToolBuilder();
-                    builder.id = key.isEmpty() ? UUID.randomUUID().toString() : key;
+                    builder.id = buildToolCallId(callId, itemId);
                     builder.name = getAsString(item, "name");
                     builder.index = state.nextIndex++;
                     if (item.has("arguments") && !item.get("arguments").isJsonNull()) {
                         builder.arguments.append(item.get("arguments").getAsString());
                     }
                     state.tools.put(key, builder);
+                    if (!itemId.isEmpty() && !itemId.equals(key)) {
+                        state.tools.put(itemId, builder);
+                    }
                     stream.push(new ToolCallStartEvent(builder.index));
                 }
             }
@@ -439,7 +453,7 @@ public class OpenAIResponsesProvider implements ApiProvider {
             state.textStarted = false;
         }
 
-        for (ToolBuilder builder : state.tools.values()) {
+        for (ToolBuilder builder : new LinkedHashSet<ToolBuilder>(state.tools.values())) {
             Map<String, Object> args = parseArgs(builder.arguments.toString());
             ToolCallContent toolCall = new ToolCallContent(builder.id, builder.name == null ? "tool" : builder.name, args);
             state.blocks.add(toolCall);
@@ -474,6 +488,43 @@ public class OpenAIResponsesProvider implements ApiProvider {
             }
         }
         return builder.toString();
+    }
+
+    private ToolCallIds splitToolCallIds(String rawId) {
+        String value = rawId == null ? "" : rawId.trim();
+        if (value.isEmpty()) {
+            return new ToolCallIds("tool_call", "");
+        }
+        int separatorIndex = value.indexOf('|');
+        if (separatorIndex <= 0 || separatorIndex == value.length() - 1) {
+            return new ToolCallIds(value, "");
+        }
+        String callId = value.substring(0, separatorIndex).trim();
+        String itemId = value.substring(separatorIndex + 1).trim();
+        if (callId.isEmpty()) {
+            callId = value;
+        }
+        return new ToolCallIds(callId, itemId);
+    }
+
+    private String primaryToolKey(String callId, String itemId) {
+        if (callId != null && !callId.isEmpty()) {
+            return callId;
+        }
+        if (itemId != null && !itemId.isEmpty()) {
+            return itemId;
+        }
+        return UUID.randomUUID().toString();
+    }
+
+    private String buildToolCallId(String callId, String itemId) {
+        if (callId == null || callId.isEmpty()) {
+            return itemId == null || itemId.isEmpty() ? UUID.randomUUID().toString() : itemId;
+        }
+        if (itemId == null || itemId.isEmpty()) {
+            return callId;
+        }
+        return callId + "|" + itemId;
     }
 
     private String getAsString(JsonObject object, String field) {
@@ -526,5 +577,15 @@ public class OpenAIResponsesProvider implements ApiProvider {
         private String name;
         private int index;
         private StringBuilder arguments = new StringBuilder();
+    }
+
+    private static final class ToolCallIds {
+        private final String callId;
+        private final String itemId;
+
+        private ToolCallIds(String callId, String itemId) {
+            this.callId = callId;
+            this.itemId = itemId;
+        }
     }
 }
