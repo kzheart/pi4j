@@ -183,6 +183,88 @@ class AgentDeepSeekIntegrationTest {
     }
 
     @Test
+    void agentWithToolsWorksOnDeepSeekAnthropicCompat() throws Exception {
+        String apiKey = requireApiKey();
+        ApiRegistry.register(new AnthropicProvider());
+
+        AgentTool addTool = new AgentTool() {
+            @Override
+            public String getName() {
+                return "add_numbers";
+            }
+
+            @Override
+            public String getDescription() {
+                return "计算两个整数的和";
+            }
+
+            @Override
+            public String getLabel() {
+                return "加法工具";
+            }
+
+            @Override
+            public JsonObject getParameters() {
+                JsonObject schema = new JsonObject();
+                schema.addProperty("type", "object");
+
+                JsonObject props = new JsonObject();
+                JsonObject a = new JsonObject();
+                a.addProperty("type", "integer");
+                JsonObject b = new JsonObject();
+                b.addProperty("type", "integer");
+                props.add("a", a);
+                props.add("b", b);
+                schema.add("properties", props);
+
+                JsonArray required = new JsonArray();
+                required.add("a");
+                required.add("b");
+                schema.add("required", required);
+                return schema;
+            }
+
+            @Override
+            public AgentToolResult execute(
+                    String toolCallId,
+                    Map<String, Object> params,
+                    AbortHandle abortHandle,
+                    ToolUpdateCallback onUpdate) {
+                int a = ((Number) params.get("a")).intValue();
+                int b = ((Number) params.get("b")).intValue();
+                return AgentToolResult.text(String.valueOf(a + b));
+            }
+        };
+
+        boolean executedTool = false;
+        for (int i = 0; i < 2 && !executedTool; i++) {
+            List<AgentEvent> events = new CopyOnWriteArrayList<AgentEvent>();
+            List<AgentState> states = new CopyOnWriteArrayList<AgentState>();
+            Agent agent = new Agent(AgentOptions.builder()
+                    .model(deepSeekAnthropicModel())
+                    .systemPrompt("你必须先调用工具完成计算，然后只输出最终答案。")
+                    .tools(Collections.singletonList(addTool))
+                    .getApiKey(provider -> apiKey)
+                    .temperature(0.0)
+                    .maxTokens(256)
+                    .toolChoice("auto")
+                    .build());
+            agent.subscribe(events::add);
+            agent.subscribeState(states::add);
+
+            agent.prompt("请调用 add_numbers 工具计算 19 + 23，最后只回复数字。")
+                    .get(120, TimeUnit.SECONDS);
+
+            executedTool = (hasToolExecution(events) || hasToolResult(agent.getState().getMessages()))
+                    && sawPendingToolCall(states)
+                    && sawStreamingState(states)
+                    && endedInIdleState(states);
+        }
+
+        assertTrue(executedTool);
+    }
+
+    @Test
     void agentComplexToolWorkflowShowsStateAndModelOutput() throws Exception {
         String apiKey = requireApiKey();
         ApiRegistry.register(new OpenAICompletionsProvider());
