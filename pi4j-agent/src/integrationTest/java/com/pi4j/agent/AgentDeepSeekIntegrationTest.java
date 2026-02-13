@@ -15,6 +15,7 @@ import com.pi4j.agent.tool.AgentToolResult;
 import com.pi4j.agent.tool.ToolUpdateCallback;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiRegistry;
+import com.pi4j.ai.provider.anthropic.AnthropicProvider;
 import com.pi4j.ai.provider.openai.OpenAICompletionsProvider;
 import com.pi4j.ai.types.AssistantMessage;
 import com.pi4j.ai.types.ContentBlock;
@@ -57,6 +58,31 @@ class AgentDeepSeekIntegrationTest {
 
         Agent agent = new Agent(AgentOptions.builder()
                 .model(deepSeekOpenAiModel())
+                .systemPrompt("你是一个简洁助手。")
+                .getApiKey(provider -> apiKey)
+                .temperature(0.0)
+                .maxTokens(128)
+                .build());
+        agent.subscribeState(states::add);
+
+        agent.prompt("请用一句话回复：OK").get(90, TimeUnit.SECONDS);
+
+        List<AgentMessage> messages = agent.getState().getMessages();
+        String assistantText = extractLatestAssistantText(messages);
+
+        assertFalse(assistantText.trim().isEmpty());
+        assertTrue(sawStreamingState(states));
+        assertTrue(endedInIdleState(states));
+    }
+
+    @Test
+    void agentWithoutToolsWorksOnDeepSeekAnthropicCompat() throws Exception {
+        String apiKey = requireApiKey();
+        ApiRegistry.register(new AnthropicProvider());
+        List<AgentState> states = new CopyOnWriteArrayList<AgentState>();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(deepSeekAnthropicModel())
                 .systemPrompt("你是一个简洁助手。")
                 .getApiKey(provider -> apiKey)
                 .temperature(0.0)
@@ -413,6 +439,21 @@ class AgentDeepSeekIntegrationTest {
                 "openai-completions",
                 "deepseek",
                 DEEPSEEK_OPENAI_BASE_URL,
+                false,
+                Arrays.asList("text"),
+                null,
+                65536,
+                4096,
+                Collections.<String, String>emptyMap());
+    }
+
+    private Model deepSeekAnthropicModel() {
+        return new Model(
+                "deepseek-chat",
+                "DeepSeek Chat",
+                "anthropic-messages",
+                "deepseek",
+                DEEPSEEK_ANTHROPIC_BASE_URL,
                 false,
                 Arrays.asList("text"),
                 null,
