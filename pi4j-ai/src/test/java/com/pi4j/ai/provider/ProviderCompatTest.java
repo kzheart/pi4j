@@ -46,6 +46,18 @@ class ProviderCompatTest {
         assertTrue(ProviderCompat.isOpenAiCompatible("deepseek"));
     }
 
+    @Test
+    void openAiCompatibleProviderMatrix() {
+        assertTrue(ProviderCompat.isOpenAiCompatible("openrouter"));
+        assertTrue(ProviderCompat.isOpenAiCompatible("ollama"));
+        assertTrue(ProviderCompat.isOpenAiCompatible("cerebras"));
+        assertTrue(ProviderCompat.isOpenAiCompatible("zai"));
+        assertTrue(ProviderCompat.isOpenAiCompatible("xai"));
+        assertFalse(ProviderCompat.isOpenAiCompatible("anthropic"));
+        assertFalse(ProviderCompat.isOpenAiCompatible("google"));
+        assertFalse(ProviderCompat.isOpenAiCompatible("unknown-provider"));
+    }
+
     private Model model(String provider, String baseUrl) {
         return new Model(
                 "demo",
