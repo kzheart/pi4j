@@ -3,6 +3,7 @@ package com.pi4j.agent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.pi4j.agent.func.ApiKeyResolver;
@@ -147,5 +148,13 @@ class AgentOptionsTest {
         assertSame(dispatcher, options.getToolDispatcher());
         assertEquals(1, options.getToolMiddlewares().size());
         assertSame(middleware, options.getToolMiddlewares().get(0));
+    }
+
+    @Test
+    void builderRejectsNullToolDispatcher() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> AgentOptions.builder().toolDispatcher(null));
+        assertEquals("toolDispatcher is required.", exception.getMessage());
     }
 }

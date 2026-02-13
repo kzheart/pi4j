@@ -251,12 +251,19 @@ public final class AgentOptions {
         }
 
         public Builder toolDispatcher(ToolDispatcher toolDispatcher) {
+            if (toolDispatcher == null) {
+                throw new IllegalArgumentException("toolDispatcher is required.");
+            }
             this.toolDispatcher = toolDispatcher;
             return this;
         }
 
         public Builder toolMiddlewares(List<ToolMiddleware> toolMiddlewares) {
-            this.toolMiddlewares = new ArrayList<ToolMiddleware>(toolMiddlewares);
+            if (toolMiddlewares == null) {
+                this.toolMiddlewares = new ArrayList<ToolMiddleware>();
+            } else {
+                this.toolMiddlewares = new ArrayList<ToolMiddleware>(toolMiddlewares);
+            }
             return this;
         }
 

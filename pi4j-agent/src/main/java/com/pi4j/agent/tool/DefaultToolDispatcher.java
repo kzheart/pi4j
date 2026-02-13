@@ -15,6 +15,9 @@ public final class DefaultToolDispatcher implements ToolDispatcher {
     }
 
     public DefaultToolDispatcher(ExecutorService blockingExecutor, ToolDispatcher hostDispatcher) {
+        if (blockingExecutor == null) {
+            throw new IllegalArgumentException("blockingExecutor is required.");
+        }
         this.blockingExecutor = blockingExecutor;
         this.hostDispatcher = hostDispatcher;
     }
