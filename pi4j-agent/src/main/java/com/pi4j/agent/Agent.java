@@ -301,9 +301,13 @@ public class Agent {
                     StreamOptions streamOptions = StreamOptions.builder()
                             .apiKey(apiKey)
                             .reasoning(thinkingLevel)
+                            .thinkingBudget(options.getThinkingBudget())
+                            .thinkingEffort(resolveThinkingEffort())
                             .temperature(options.getTemperature())
                             .maxTokens(options.getMaxTokens())
                             .toolChoice(options.getToolChoice())
+                            .cacheRetention(options.getCacheRetention())
+                            .sessionId(options.getSessionId())
                             .abortHandle(abortHandle)
                             .build();
 
@@ -493,6 +497,16 @@ public class Agent {
             all.add(next);
         }
         return all;
+    }
+
+    private String resolveThinkingEffort() {
+        if (options.getThinkingEffort() != null && !options.getThinkingEffort().trim().isEmpty()) {
+            return options.getThinkingEffort();
+        }
+        if (thinkingLevel == null || "off".equals(thinkingLevel)) {
+            return null;
+        }
+        return thinkingLevel;
     }
 
     private List<ToolCallContent> extractToolCalls(AssistantMessage assistant) {

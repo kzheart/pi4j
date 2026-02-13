@@ -121,6 +121,11 @@ public class OpenAIResponsesProvider implements ApiProvider {
         payload.addProperty("model", model.getId());
         payload.addProperty("stream", true);
         payload.addProperty("store", false);
+        if (options.getSessionId() != null
+                && !options.getSessionId().trim().isEmpty()
+                && !"none".equals(options.getCacheRetention())) {
+            payload.addProperty("prompt_cache_key", options.getSessionId());
+        }
         if (options.getMaxTokens() != null) {
             payload.addProperty("max_output_tokens", options.getMaxTokens());
         }

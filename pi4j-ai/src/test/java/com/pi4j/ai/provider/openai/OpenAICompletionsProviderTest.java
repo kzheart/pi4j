@@ -1,9 +1,11 @@
 package com.pi4j.ai.provider.openai;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.JsonObject;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
@@ -13,11 +15,13 @@ import com.pi4j.ai.types.Message;
 import com.pi4j.ai.types.Model;
 import com.pi4j.ai.types.TextContent;
 import com.pi4j.ai.types.UserMessage;
+import com.pi4j.ai.util.JsonUtil;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collections;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
 class OpenAICompletionsProviderTest {
@@ -43,10 +47,48 @@ class OpenAICompletionsProviderTest {
                 Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
                 Collections.emptyList());
 
-        Request request = provider.buildRequest(model, context, StreamOptions.builder().apiKey("sk-test").build());
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .maxTokens(128)
+                .build());
+        JsonObject payload = readPayload(request);
 
         assertEquals("https://api.deepseek.com/v1/chat/completions", request.url().toString());
         assertEquals("Bearer sk-test", request.header("authorization"));
+        assertTrue(payload.has("max_completion_tokens"));
+    }
+
+    @Test
+    void buildRequestUsesMistralCompatFields() {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Model model = new Model(
+                "mistral-small",
+                "Mistral Small",
+                "openai-completions",
+                "mistral",
+                "https://api.mistral.ai",
+                false,
+                Arrays.asList("text"),
+                null,
+                64000,
+                4096,
+                Collections.<String, String>emptyMap());
+
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .maxTokens(256)
+                .thinkingEffort("medium")
+                .build());
+
+        JsonObject payload = readPayload(request);
+        assertTrue(payload.has("max_tokens"));
+        assertFalse(payload.has("max_completion_tokens"));
+        assertTrue(payload.has("reasoning_effort"));
     }
 
     @Test
@@ -75,5 +117,15 @@ class OpenAICompletionsProviderTest {
 
         assertNotNull(stream.result().get());
         assertTrue(stream.result().get().getContent().size() >= 2);
+    }
+
+    private JsonObject readPayload(Request request) {
+        try {
+            Buffer buffer = new Buffer();
+            request.body().writeTo(buffer);
+            return JsonUtil.gson().fromJson(buffer.readUtf8(), JsonObject.class);
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
     }
 }

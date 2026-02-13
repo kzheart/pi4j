@@ -21,7 +21,11 @@ public final class AgentOptions {
     private final ApiKeyResolver getApiKey;
     private final Double temperature;
     private final Integer maxTokens;
+    private final Integer thinkingBudget;
+    private final String thinkingEffort;
     private final String toolChoice;
+    private final String cacheRetention;
+    private final String sessionId;
     private final String steeringMode;
     private final String followUpMode;
 
@@ -36,7 +40,11 @@ public final class AgentOptions {
         this.getApiKey = builder.getApiKey;
         this.temperature = builder.temperature;
         this.maxTokens = builder.maxTokens;
+        this.thinkingBudget = builder.thinkingBudget;
+        this.thinkingEffort = builder.thinkingEffort;
         this.toolChoice = builder.toolChoice;
+        this.cacheRetention = builder.cacheRetention;
+        this.sessionId = builder.sessionId;
         this.steeringMode = builder.steeringMode;
         this.followUpMode = builder.followUpMode;
     }
@@ -85,8 +93,24 @@ public final class AgentOptions {
         return maxTokens;
     }
 
+    public Integer getThinkingBudget() {
+        return thinkingBudget;
+    }
+
+    public String getThinkingEffort() {
+        return thinkingEffort;
+    }
+
     public String getToolChoice() {
         return toolChoice;
+    }
+
+    public String getCacheRetention() {
+        return cacheRetention;
+    }
+
+    public String getSessionId() {
+        return sessionId;
     }
 
     public String getSteeringMode() {
@@ -116,7 +140,11 @@ public final class AgentOptions {
         private ApiKeyResolver getApiKey = provider -> System.getenv("DEEPSEEK_API_KEY");
         private Double temperature;
         private Integer maxTokens;
+        private Integer thinkingBudget;
+        private String thinkingEffort;
         private String toolChoice;
+        private String cacheRetention;
+        private String sessionId;
         private String steeringMode = "all";
         private String followUpMode = "all";
 
@@ -170,8 +198,28 @@ public final class AgentOptions {
             return this;
         }
 
+        public Builder thinkingBudget(Integer thinkingBudget) {
+            this.thinkingBudget = thinkingBudget;
+            return this;
+        }
+
+        public Builder thinkingEffort(String thinkingEffort) {
+            this.thinkingEffort = thinkingEffort;
+            return this;
+        }
+
         public Builder toolChoice(String toolChoice) {
             this.toolChoice = toolChoice;
+            return this;
+        }
+
+        public Builder cacheRetention(String cacheRetention) {
+            this.cacheRetention = cacheRetention;
+            return this;
+        }
+
+        public Builder sessionId(String sessionId) {
+            this.sessionId = sessionId;
             return this;
         }
 

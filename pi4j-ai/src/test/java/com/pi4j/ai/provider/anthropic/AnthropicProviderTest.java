@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEvent;
@@ -13,6 +15,7 @@ import com.pi4j.ai.types.Message;
 import com.pi4j.ai.types.Model;
 import com.pi4j.ai.types.TextContent;
 import com.pi4j.ai.types.UserMessage;
+import com.pi4j.ai.util.JsonUtil;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
 class AnthropicProviderTest {
@@ -51,6 +55,68 @@ class AnthropicProviderTest {
 
         assertEquals("https://api.deepseek.com/anthropic/v1/messages", request.url().toString());
         assertEquals("sk-test", request.header("x-api-key"));
+    }
+
+    @Test
+    void buildRequestAddsCacheControlForShortRetention() {
+        AnthropicProvider provider = new AnthropicProvider(new OkHttpClient());
+        Model model = new Model(
+                "claude-sonnet",
+                "Claude Sonnet",
+                "anthropic-messages",
+                "anthropic",
+                "https://api.anthropic.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                64000,
+                2048,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                "sys",
+                Collections.<Message>singletonList(new UserMessage(Collections.singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .cacheRetention("short")
+                .build());
+        JsonObject payload = readPayload(request);
+        JsonArray system = payload.getAsJsonArray("system");
+        JsonObject systemText = system.get(0).getAsJsonObject();
+        JsonObject cacheControl = systemText.getAsJsonObject("cache_control");
+        assertEquals("ephemeral", cacheControl.get("type").getAsString());
+    }
+
+    @Test
+    void buildRequestAddsTtlForLongRetention() {
+        AnthropicProvider provider = new AnthropicProvider(new OkHttpClient());
+        Model model = new Model(
+                "claude-sonnet",
+                "Claude Sonnet",
+                "anthropic-messages",
+                "anthropic",
+                "https://api.anthropic.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                64000,
+                2048,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                "sys",
+                Collections.<Message>singletonList(new UserMessage(Collections.singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .cacheRetention("long")
+                .build());
+        JsonObject payload = readPayload(request);
+        JsonArray system = payload.getAsJsonArray("system");
+        JsonObject systemText = system.get(0).getAsJsonObject();
+        JsonObject cacheControl = systemText.getAsJsonObject("cache_control");
+        assertEquals("1h", cacheControl.get("ttl").getAsString());
     }
 
     @Test
@@ -93,5 +159,15 @@ class AnthropicProviderTest {
         assertEquals(1, stream.result().get().getContent().size());
         TextContent text = (TextContent) stream.result().get().getContent().get(0);
         assertEquals("hello", text.getText());
+    }
+
+    private JsonObject readPayload(Request request) {
+        try {
+            Buffer buffer = new Buffer();
+            request.body().writeTo(buffer);
+            return JsonUtil.gson().fromJson(buffer.readUtf8(), JsonObject.class);
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
     }
 }

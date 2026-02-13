@@ -125,11 +125,22 @@ public class AnthropicProvider implements ApiProvider {
         if (options.getTemperature() != null) {
             payload.addProperty("temperature", options.getTemperature());
         }
+        JsonObject cacheControl = buildCacheControl(options.getCacheRetention());
         if (context.getSystemPrompt() != null && !context.getSystemPrompt().isEmpty()) {
-            payload.addProperty("system", context.getSystemPrompt());
+            if (cacheControl != null) {
+                JsonArray systemBlocks = new JsonArray();
+                JsonObject systemText = new JsonObject();
+                systemText.addProperty("type", "text");
+                systemText.addProperty("text", context.getSystemPrompt());
+                systemText.add("cache_control", cacheControl);
+                systemBlocks.add(systemText);
+                payload.add("system", systemBlocks);
+            } else {
+                payload.addProperty("system", context.getSystemPrompt());
+            }
         }
 
-        payload.add("messages", buildMessages(context.getMessages()));
+        payload.add("messages", buildMessages(context.getMessages(), cacheControl));
         payload.add("tools", buildTools(context.getTools()));
 
         RequestBody body = RequestBody.create(JsonUtil.gson().toJson(payload), JSON_MEDIA_TYPE);
@@ -151,20 +162,23 @@ public class AnthropicProvider implements ApiProvider {
         return builder.build();
     }
 
-    private JsonArray buildMessages(List<Message> messages) {
+    private JsonArray buildMessages(List<Message> messages, JsonObject cacheControl) {
         JsonArray list = new JsonArray();
-        for (Message message : messages) {
+        int lastUserMessageIndex = findLastUserMessageIndex(messages);
+        for (int index = 0; index < messages.size(); index++) {
+            Message message = messages.get(index);
             if (message instanceof UserMessage) {
                 UserMessage user = (UserMessage) message;
                 JsonObject item = new JsonObject();
                 item.addProperty("role", "user");
-                item.add("content", toAnthropicContent(user.getContent()));
+                boolean applyCacheControl = cacheControl != null && index == lastUserMessageIndex;
+                item.add("content", toAnthropicContent(user.getContent(), cacheControl, applyCacheControl));
                 list.add(item);
             } else if (message instanceof AssistantMessage) {
                 AssistantMessage assistant = (AssistantMessage) message;
                 JsonObject item = new JsonObject();
                 item.addProperty("role", "assistant");
-                item.add("content", toAnthropicContent(assistant.getContent()));
+                item.add("content", toAnthropicContent(assistant.getContent(), null, false));
                 list.add(item);
             } else if (message instanceof ToolResultMessage) {
                 ToolResultMessage tool = (ToolResultMessage) message;
@@ -175,7 +189,7 @@ public class AnthropicProvider implements ApiProvider {
                 toolResult.addProperty("type", "tool_result");
                 toolResult.addProperty("tool_use_id", tool.getToolCallId());
                 toolResult.addProperty("is_error", tool.isError());
-                toolResult.add("content", toAnthropicContent(tool.getContent()));
+                toolResult.add("content", toAnthropicContent(tool.getContent(), null, false));
                 content.add(toolResult);
                 item.add("content", content);
                 list.add(item);
@@ -184,14 +198,16 @@ public class AnthropicProvider implements ApiProvider {
         return list;
     }
 
-    private JsonArray toAnthropicContent(List<ContentBlock> content) {
+    private JsonArray toAnthropicContent(List<ContentBlock> content, JsonObject cacheControl, boolean applyCacheControl) {
         JsonArray list = new JsonArray();
+        JsonObject lastText = null;
         for (ContentBlock block : content) {
             JsonObject item = new JsonObject();
             if (block instanceof TextContent) {
                 TextContent text = (TextContent) block;
                 item.addProperty("type", "text");
                 item.addProperty("text", text.getText());
+                lastText = item;
             } else if (block instanceof ThinkingContent) {
                 ThinkingContent thinking = (ThinkingContent) block;
                 item.addProperty("type", "thinking");
@@ -216,7 +232,31 @@ public class AnthropicProvider implements ApiProvider {
             }
             list.add(item);
         }
+        if (applyCacheControl && cacheControl != null && lastText != null) {
+            lastText.add("cache_control", cacheControl);
+        }
         return list;
+    }
+
+    private int findLastUserMessageIndex(List<Message> messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if (messages.get(i) instanceof UserMessage) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private JsonObject buildCacheControl(String cacheRetention) {
+        if (cacheRetention == null || cacheRetention.trim().isEmpty() || "none".equals(cacheRetention)) {
+            return null;
+        }
+        JsonObject cacheControl = new JsonObject();
+        cacheControl.addProperty("type", "ephemeral");
+        if ("long".equals(cacheRetention)) {
+            cacheControl.addProperty("ttl", "1h");
+        }
+        return cacheControl;
     }
 
     private JsonArray buildTools(List<Tool> tools) {

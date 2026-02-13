@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiProvider;
+import com.pi4j.ai.provider.ProviderCompat;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
 import com.pi4j.ai.stream.DoneEvent;
@@ -117,15 +118,23 @@ public class OpenAICompletionsProvider implements ApiProvider {
         String url = baseUrl + API_PATH;
 
         JsonObject payload = new JsonObject();
+        ProviderCompat.OpenAiCompletionsCompat compat = ProviderCompat.detectOpenAiCompletionsCompat(model);
         payload.addProperty("model", model.getId());
         payload.addProperty("stream", true);
         if (options.getMaxTokens() != null) {
-            payload.addProperty("max_tokens", options.getMaxTokens());
+            payload.addProperty(compat.getMaxTokensField(), options.getMaxTokens());
         }
         if (options.getTemperature() != null) {
             payload.addProperty("temperature", options.getTemperature());
         }
-        payload.add("messages", buildMessages(context.getMessages()));
+        if (options.getThinkingEffort() != null && !options.getThinkingEffort().isEmpty() && compat.isSupportsReasoningEffort()) {
+            if ("zai".equals(compat.getThinkingFormat())) {
+                payload.addProperty("reasoning", options.getThinkingEffort());
+            } else {
+                payload.addProperty("reasoning_effort", options.getThinkingEffort());
+            }
+        }
+        payload.add("messages", buildMessages(context.getMessages(), compat));
         if (!context.getTools().isEmpty()) {
             payload.add("tools", buildTools(context.getTools()));
         }
@@ -162,7 +171,7 @@ public class OpenAICompletionsProvider implements ApiProvider {
         return builder.build();
     }
 
-    private JsonArray buildMessages(List<Message> messages) {
+    private JsonArray buildMessages(List<Message> messages, ProviderCompat.OpenAiCompletionsCompat compat) {
         JsonArray list = new JsonArray();
         for (Message message : messages) {
             if (message instanceof UserMessage) {
@@ -208,6 +217,9 @@ public class OpenAICompletionsProvider implements ApiProvider {
                 JsonObject item = new JsonObject();
                 item.addProperty("role", "tool");
                 item.addProperty("tool_call_id", tool.getToolCallId());
+                if (compat.isRequiresToolResultName()) {
+                    item.addProperty("name", tool.getToolName());
+                }
                 item.addProperty("content", flattenText(tool.getContent()));
                 list.add(item);
             }

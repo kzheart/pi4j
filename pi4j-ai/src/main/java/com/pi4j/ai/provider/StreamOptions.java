@@ -10,6 +10,7 @@ public final class StreamOptions {
     private final Integer maxTokens;
     private final String reasoning;
     private final Integer thinkingBudget;
+    private final String thinkingEffort;
     private final String toolChoice;
     private final String cacheRetention;
     private final String sessionId;
@@ -22,6 +23,7 @@ public final class StreamOptions {
         this.maxTokens = builder.maxTokens;
         this.reasoning = builder.reasoning;
         this.thinkingBudget = builder.thinkingBudget;
+        this.thinkingEffort = builder.thinkingEffort;
         this.toolChoice = builder.toolChoice;
         this.cacheRetention = builder.cacheRetention;
         this.sessionId = builder.sessionId;
@@ -53,6 +55,10 @@ public final class StreamOptions {
         return thinkingBudget;
     }
 
+    public String getThinkingEffort() {
+        return thinkingEffort;
+    }
+
     public String getToolChoice() {
         return toolChoice;
     }
@@ -79,6 +85,7 @@ public final class StreamOptions {
         private Integer maxTokens;
         private String reasoning;
         private Integer thinkingBudget;
+        private String thinkingEffort;
         private String toolChoice;
         private String cacheRetention;
         private String sessionId;
@@ -107,6 +114,11 @@ public final class StreamOptions {
 
         public Builder thinkingBudget(Integer thinkingBudget) {
             this.thinkingBudget = thinkingBudget;
+            return this;
+        }
+
+        public Builder thinkingEffort(String thinkingEffort) {
+            this.thinkingEffort = thinkingEffort;
             return this;
         }
 
