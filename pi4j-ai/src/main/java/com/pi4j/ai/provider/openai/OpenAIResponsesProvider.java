@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -142,12 +143,14 @@ public class OpenAIResponsesProvider implements ApiProvider {
                 ? DEFAULT_BASE_URL
                 : trimTrailingSlash(model.getBaseUrl());
         String url = baseUrl + API_PATH;
+        boolean supportPromptCacheKey = supportsPromptCacheKey(baseUrl);
 
         JsonObject payload = new JsonObject();
         payload.addProperty("model", model.getId());
         payload.addProperty("stream", true);
         payload.addProperty("store", false);
-        if (options.getSessionId() != null
+        if (supportPromptCacheKey
+                && options.getSessionId() != null
                 && !options.getSessionId().trim().isEmpty()
                 && !"none".equals(options.getCacheRetention())) {
             payload.addProperty("prompt_cache_key", options.getSessionId());
@@ -157,6 +160,9 @@ public class OpenAIResponsesProvider implements ApiProvider {
         }
         if (options.getTemperature() != null) {
             payload.addProperty("temperature", options.getTemperature());
+        }
+        if (model.isReasoning()) {
+            addReasoning(payload, options);
         }
 
         payload.add("input", buildInput(context.getMessages()));
@@ -181,6 +187,40 @@ public class OpenAIResponsesProvider implements ApiProvider {
         }
 
         return builder.build();
+    }
+
+    private void addReasoning(JsonObject payload, StreamOptions options) {
+        String effort = normalizeReasoningEffort(options.getThinkingEffort());
+        if (effort == null) {
+            return;
+        }
+        JsonObject reasoning = new JsonObject();
+        reasoning.addProperty("effort", effort);
+        payload.add("reasoning", reasoning);
+    }
+
+    private String normalizeReasoningEffort(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.isEmpty() || "off".equals(value) || "none".equals(value)) {
+            return null;
+        }
+        switch (value) {
+            case "minimal":
+            case "low":
+            case "medium":
+            case "high":
+            case "xhigh":
+                return value;
+            default:
+                return null;
+        }
+    }
+
+    private boolean supportsPromptCacheKey(String baseUrl) {
+        return baseUrl.toLowerCase(Locale.ROOT).contains("api.openai.com");
     }
 
     private JsonArray buildInput(List<Message> messages) {

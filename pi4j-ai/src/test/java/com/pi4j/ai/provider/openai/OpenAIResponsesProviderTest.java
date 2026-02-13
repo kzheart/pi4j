@@ -141,6 +141,63 @@ class OpenAIResponsesProviderTest {
     }
 
     @Test
+    void buildRequestOmitsPromptCacheKeyForCompatibleGateway() {
+        OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
+        Model model = new Model(
+                "gpt-5.3-codex",
+                "GPT-5.3 Codex",
+                "openai-responses",
+                "sub2api",
+                "https://sub.kzheart.me",
+                true,
+                Arrays.asList("text"),
+                null,
+                128000,
+                16384,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .cacheRetention("short")
+                .sessionId("session-1")
+                .build());
+        JsonObject payload = readPayload(request);
+        assertTrue(!payload.has("prompt_cache_key"));
+    }
+
+    @Test
+    void buildRequestAddsReasoningEffortWhenProvided() {
+        OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
+        Model model = new Model(
+                "gpt-5.3-codex",
+                "GPT-5.3 Codex",
+                "openai-responses",
+                "sub2api",
+                "https://sub.kzheart.me",
+                true,
+                Arrays.asList("text"),
+                null,
+                128000,
+                16384,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .thinkingEffort("xhigh")
+                .build());
+        JsonObject payload = readPayload(request);
+        assertEquals("xhigh", payload.getAsJsonObject("reasoning").get("effort").getAsString());
+    }
+
+    @Test
     void parseSseParsesResponseEvents() throws Exception {
         OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
         Model model = new Model(
