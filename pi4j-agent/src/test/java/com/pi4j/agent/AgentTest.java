@@ -11,6 +11,7 @@ import com.pi4j.agent.event.ToolExecutionEndEvent;
 import com.pi4j.agent.event.ToolExecutionStartEvent;
 import com.pi4j.agent.tool.AgentTool;
 import com.pi4j.agent.tool.AgentToolResult;
+import com.pi4j.agent.tool.ToolSpec;
 import com.pi4j.agent.tool.ToolUpdateCallback;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiProvider;
@@ -212,6 +213,49 @@ class AgentTest {
             }
         }
         assertTrue(hasToolResult);
+    }
+
+    @Test
+    void promptWithToolSpecExecutesTool() throws Exception {
+        ApiRegistry.register(new StaticProvider(true));
+        Model model = buildModel();
+
+        AgentTool tool = ToolSpec.builder("sum")
+                .description("sum numbers")
+                .label("sum")
+                .integerParam("a", true, "first")
+                .integerParam("b", true, "second")
+                .handler((toolCallId, args, abortHandle, onUpdate) -> AgentToolResult.text(String.valueOf(
+                        args.requireInt("a") + args.requireInt("b"))))
+                .build()
+                .toAgentTool();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .tools(Collections.singletonList(tool))
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.prompt("calc").get();
+
+        boolean hasSumResult = false;
+        for (AgentMessage message : agent.getState().getMessages()) {
+            if (!(message instanceof LlmAgentMessage)) {
+                continue;
+            }
+            Message llm = ((LlmAgentMessage) message).getMessage();
+            if (!(llm instanceof ToolResultMessage)) {
+                continue;
+            }
+            ToolResultMessage result = (ToolResultMessage) llm;
+            if (!"sum".equals(result.getToolName())) {
+                continue;
+            }
+            if (!result.getContent().isEmpty() && result.getContent().get(0) instanceof TextContent) {
+                hasSumResult = "3".equals(((TextContent) result.getContent().get(0)).getText());
+            }
+        }
+        assertTrue(hasSumResult);
     }
 
     @Test
