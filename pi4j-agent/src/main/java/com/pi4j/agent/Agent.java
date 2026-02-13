@@ -14,6 +14,8 @@ import com.pi4j.agent.event.TurnEndEvent;
 import com.pi4j.agent.event.TurnStartEvent;
 import com.pi4j.agent.tool.AgentTool;
 import com.pi4j.agent.tool.AgentToolResult;
+import com.pi4j.agent.tool.ToolExecutionContext;
+import com.pi4j.agent.tool.ToolExecutor;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.StreamOptions;
@@ -68,6 +70,7 @@ public class Agent {
     private volatile CompletableFuture<Void> runningFuture;
     private volatile AbortHandle runningAbortHandle;
     private final AgentOptions options;
+    private final ToolExecutor toolExecutor;
 
     public Agent(AgentOptions options) {
         this.options = options;
@@ -76,6 +79,7 @@ public class Agent {
         this.thinkingLevel = options.getThinkingLevel();
         this.tools = new ArrayList<AgentTool>(options.getTools());
         this.messages.addAll(options.getInitialMessages());
+        this.toolExecutor = new ToolExecutor(options.getToolDispatcher(), options.getToolMiddlewares());
     }
 
     public AgentState getState() {
@@ -420,11 +424,14 @@ public class Agent {
             fire(new ToolExecutionStartEvent(toolCall.getId(), toolCall.getName(), validated));
 
             try {
-                AgentToolResult result = tool.execute(
+                ToolExecutionContext context = new ToolExecutionContext(
                         toolCall.getId(),
+                        toolCall.getName(),
+                        tool,
                         validated,
                         abortHandle,
                         update -> fire(new ToolExecutionUpdateEvent(toolCall.getId(), toolCall.getName(), update)));
+                AgentToolResult result = toolExecutor.execute(context);
                 ToolResultMessage toolResultMessage = new ToolResultMessage(
                         toolCall.getId(),
                         toolCall.getName(),
