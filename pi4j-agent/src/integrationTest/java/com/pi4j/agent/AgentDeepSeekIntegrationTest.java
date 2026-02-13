@@ -39,6 +39,9 @@ import org.junit.jupiter.api.Test;
 
 class AgentDeepSeekIntegrationTest {
     private static final Gson RAW_LOG_GSON = new GsonBuilder().disableHtmlEscaping().create();
+    private static final String DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY";
+    private static final String DEEPSEEK_OPENAI_BASE_URL = "https://api.deepseek.com";
+    private static final String DEEPSEEK_ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic";
 
 
     @AfterEach
@@ -398,8 +401,8 @@ class AgentDeepSeekIntegrationTest {
     }
 
     private String requireApiKey() {
-        String apiKey = System.getenv("DEEPSEEK_API_KEY");
-        Assumptions.assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), "DEEPSEEK_API_KEY is not set");
+        String apiKey = System.getenv(DEEPSEEK_API_KEY_ENV);
+        Assumptions.assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), DEEPSEEK_API_KEY_ENV + " is not set");
         return apiKey;
     }
 
@@ -409,7 +412,7 @@ class AgentDeepSeekIntegrationTest {
                 "DeepSeek Chat",
                 "openai-completions",
                 "deepseek",
-                "https://api.deepseek.com",
+                DEEPSEEK_OPENAI_BASE_URL,
                 false,
                 Arrays.asList("text"),
                 null,

@@ -19,11 +19,13 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 class DeepSeekIntegrationTest {
+    private static final String DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY";
+    private static final String DEEPSEEK_OPENAI_BASE_URL = "https://api.deepseek.com";
+    private static final String DEEPSEEK_ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic";
 
     @Test
     void anthropicCompatWorksWithDeepSeekApiKey() throws Exception {
-        String apiKey = System.getenv("DEEPSEEK_API_KEY");
-        Assumptions.assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), "DEEPSEEK_API_KEY is not set");
+        String apiKey = requireApiKey();
 
         AnthropicProvider provider = new AnthropicProvider();
         Model model = new Model(
@@ -31,7 +33,7 @@ class DeepSeekIntegrationTest {
                 "DeepSeek Chat",
                 "anthropic-messages",
                 "deepseek",
-                "https://api.deepseek.com/anthropic",
+                DEEPSEEK_ANTHROPIC_BASE_URL,
                 false,
                 Arrays.asList("text"),
                 null,
@@ -57,8 +59,7 @@ class DeepSeekIntegrationTest {
 
     @Test
     void openAiCompatWorksWithDeepSeekApiKey() throws Exception {
-        String apiKey = System.getenv("DEEPSEEK_API_KEY");
-        Assumptions.assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), "DEEPSEEK_API_KEY is not set");
+        String apiKey = requireApiKey();
 
         OpenAICompletionsProvider provider = new OpenAICompletionsProvider();
         Model model = new Model(
@@ -66,7 +67,7 @@ class DeepSeekIntegrationTest {
                 "DeepSeek Chat",
                 "openai-completions",
                 "deepseek",
-                "https://api.deepseek.com",
+                DEEPSEEK_OPENAI_BASE_URL,
                 false,
                 Arrays.asList("text"),
                 null,
@@ -88,5 +89,11 @@ class DeepSeekIntegrationTest {
         com.pi4j.ai.types.AssistantMessage message = stream.result().get(90, TimeUnit.SECONDS);
         assertNotNull(message);
         assertFalse(message.getContent().isEmpty());
+    }
+
+    private String requireApiKey() {
+        String apiKey = System.getenv(DEEPSEEK_API_KEY_ENV);
+        Assumptions.assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), DEEPSEEK_API_KEY_ENV + " is not set");
+        return apiKey;
     }
 }
