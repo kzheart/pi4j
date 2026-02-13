@@ -56,6 +56,33 @@ class OpenAIResponsesProviderTest {
     }
 
     @Test
+    void buildRequestUsesStrictJsonContentType() {
+        OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
+        Model model = new Model(
+                "gpt-5.3-codex",
+                "GPT-5.3 Codex",
+                "openai-responses",
+                "sub2api",
+                "https://sub.kzheart.me",
+                false,
+                Arrays.asList("text"),
+                null,
+                128000,
+                16384,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("ACK")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder().apiKey("sk-test").build());
+
+        assertNotNull(request.body());
+        assertEquals("application/json", request.body().contentType().toString());
+        assertEquals("application/json", request.header("content-type"));
+    }
+
+    @Test
     void buildRequestAddsPromptCacheKeyWhenSessionEnabled() {
         OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
         Model model = new Model(

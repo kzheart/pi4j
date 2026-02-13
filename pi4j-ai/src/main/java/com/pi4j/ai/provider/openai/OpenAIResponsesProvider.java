@@ -37,6 +37,7 @@ import com.pi4j.ai.util.JsonUtil;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -163,7 +164,8 @@ public class OpenAIResponsesProvider implements ApiProvider {
             payload.add("tools", buildTools(context.getTools()));
         }
 
-        RequestBody body = RequestBody.create(JsonUtil.gson().toJson(payload), JSON_MEDIA_TYPE);
+        byte[] payloadBytes = JsonUtil.gson().toJson(payload).getBytes(StandardCharsets.UTF_8);
+        RequestBody body = RequestBody.create(payloadBytes, JSON_MEDIA_TYPE);
 
         Request.Builder builder = new Request.Builder()
                 .url(url)
