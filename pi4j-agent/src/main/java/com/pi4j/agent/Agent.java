@@ -205,7 +205,6 @@ public class Agent {
 
     public void steer(AgentMessage message) {
         steeringQueue.offer(message);
-        abort();
     }
 
     public void followUp(AgentMessage message) {
@@ -264,67 +263,81 @@ public class Agent {
         fire(new AgentStartEvent());
 
         try {
-            boolean keepRunning = true;
-            while (keepRunning) {
-                abortHandle.throwIfAborted();
-                fire(new TurnStartEvent());
+            List<AgentMessage> pendingMessages = dequeueSteeringMessages();
 
-                List<AgentMessage> transformed = options.getTransformContext().transform(copyMessages(), abortHandle);
-                List<Message> llmMessages = options.getConvertToLlm().convert(transformed);
-                Context context = new Context(systemPrompt, llmMessages, toToolDefs());
-                String apiKey = options.getGetApiKey().resolve(model.getProvider());
+            while (true) {
+                boolean hasMoreToolCalls = true;
 
-                StreamOptions streamOptions = StreamOptions.builder()
-                        .apiKey(apiKey)
-                        .reasoning(thinkingLevel)
-                        .temperature(options.getTemperature())
-                        .maxTokens(options.getMaxTokens())
-                        .toolChoice(options.getToolChoice())
-                        .abortHandle(abortHandle)
-                        .build();
+                while (hasMoreToolCalls || !pendingMessages.isEmpty()) {
+                    abortHandle.throwIfAborted();
+                    fire(new TurnStartEvent());
 
-                AssistantMessageEventStream responseStream = ApiRegistry.stream(model, context, streamOptions);
-                responseStream.subscribe(event -> {
-                    AgentMessage current = streamMessage;
-                    if (current != null) {
-                        fire(new MessageUpdateEvent(current, event));
+                    if (!pendingMessages.isEmpty()) {
+                        for (AgentMessage message : pendingMessages) {
+                            appendMessageInternal(message);
+                        }
+                        pendingMessages = Collections.emptyList();
                     }
-                });
 
-                AssistantMessage assistant = waitStream(responseStream);
-                LlmAgentMessage assistantMessage = new LlmAgentMessage(assistant);
-                streamMessage = assistantMessage;
-                fireState();
-                fire(new MessageStartEvent(assistantMessage));
-                appendMessageInternal(assistantMessage);
-                fire(new MessageEndEvent(assistantMessage));
+                    List<AgentMessage> transformed = options.getTransformContext().transform(copyMessages(), abortHandle);
+                    List<Message> llmMessages = options.getConvertToLlm().convert(transformed);
+                    Context context = new Context(systemPrompt, llmMessages, toToolDefs());
+                    String apiKey = options.getGetApiKey().resolve(model.getProvider());
 
-                List<ToolCallContent> toolCalls = extractToolCalls(assistant);
-                List<ToolResultMessage> toolResults = new ArrayList<ToolResultMessage>();
+                    StreamOptions streamOptions = StreamOptions.builder()
+                            .apiKey(apiKey)
+                            .reasoning(thinkingLevel)
+                            .temperature(options.getTemperature())
+                            .maxTokens(options.getMaxTokens())
+                            .toolChoice(options.getToolChoice())
+                            .abortHandle(abortHandle)
+                            .build();
 
-                if (!toolCalls.isEmpty()) {
-                    toolResults.addAll(executeToolCalls(toolCalls, abortHandle));
-                    for (ToolResultMessage toolResult : toolResults) {
-                        appendMessageInternal(new LlmAgentMessage(toolResult));
+                    AssistantMessageEventStream responseStream = ApiRegistry.stream(model, context, streamOptions);
+                    responseStream.subscribe(event -> {
+                        AgentMessage current = streamMessage;
+                        if (current != null) {
+                            fire(new MessageUpdateEvent(current, event));
+                        }
+                    });
+
+                    AssistantMessage assistant = waitStream(responseStream);
+                    LlmAgentMessage assistantMessage = new LlmAgentMessage(assistant);
+                    streamMessage = assistantMessage;
+                    fireState();
+                    fire(new MessageStartEvent(assistantMessage));
+                    appendMessageInternal(assistantMessage);
+                    fire(new MessageEndEvent(assistantMessage));
+
+                    List<ToolCallContent> toolCalls = extractToolCalls(assistant);
+                    hasMoreToolCalls = !toolCalls.isEmpty();
+                    List<ToolResultMessage> toolResults = new ArrayList<ToolResultMessage>();
+                    List<AgentMessage> steeringAfterTools = Collections.emptyList();
+
+                    if (hasMoreToolCalls) {
+                        ToolExecutionResult toolExecutionResult = executeToolCalls(toolCalls, abortHandle);
+                        toolResults.addAll(toolExecutionResult.toolResults);
+                        steeringAfterTools = toolExecutionResult.steeringMessages;
+                        for (ToolResultMessage toolResult : toolResults) {
+                            appendMessageInternal(new LlmAgentMessage(toolResult));
+                        }
+                    }
+
+                    fire(new TurnEndEvent(assistant, toolResults));
+
+                    if (!steeringAfterTools.isEmpty()) {
+                        pendingMessages = steeringAfterTools;
+                    } else {
+                        pendingMessages = dequeueSteeringMessages();
                     }
                 }
 
-                fire(new TurnEndEvent(assistant, toolResults));
-
-                AgentMessage steering = steeringQueue.poll();
-                if (steering != null) {
-                    appendMessageInternal(steering);
+                List<AgentMessage> followUps = dequeueFollowUpMessages();
+                if (!followUps.isEmpty()) {
+                    pendingMessages = followUps;
                     continue;
                 }
-
-                if (toolCalls.isEmpty()) {
-                    AgentMessage followUp = followUpQueue.poll();
-                    if (followUp != null) {
-                        appendMessageInternal(followUp);
-                    } else {
-                        keepRunning = false;
-                    }
-                }
+                break;
             }
 
             fire(new AgentEndEvent(copyMessages()));
@@ -344,9 +357,11 @@ public class Agent {
         return responseStream.result().get();
     }
 
-    private List<ToolResultMessage> executeToolCalls(List<ToolCallContent> toolCalls, AbortHandle abortHandle) {
+    private ToolExecutionResult executeToolCalls(List<ToolCallContent> toolCalls, AbortHandle abortHandle) {
         List<ToolResultMessage> results = new ArrayList<ToolResultMessage>();
-        for (ToolCallContent toolCall : toolCalls) {
+        List<AgentMessage> steeringMessages = Collections.emptyList();
+        for (int index = 0; index < toolCalls.size(); index++) {
+            ToolCallContent toolCall = toolCalls.get(index);
             pendingToolCalls.add(toolCall.getId());
             fireState();
             AgentTool tool = findTool(toolCall.getName());
@@ -398,8 +413,56 @@ public class Agent {
 
             pendingToolCalls.remove(toolCall.getId());
             fireState();
+
+            List<AgentMessage> steering = dequeueSteeringMessages();
+            if (!steering.isEmpty()) {
+                steeringMessages = steering;
+                for (int skipped = index + 1; skipped < toolCalls.size(); skipped++) {
+                    ToolCallContent skippedCall = toolCalls.get(skipped);
+                    ToolResultMessage skippedResult = skipToolCall(skippedCall);
+                    results.add(skippedResult);
+                }
+                break;
+            }
         }
-        return results;
+        return new ToolExecutionResult(results, steeringMessages);
+    }
+
+    private ToolResultMessage skipToolCall(ToolCallContent toolCall) {
+        AgentToolResult skippedResult = AgentToolResult.error("Skipped due to queued user message.");
+        fire(new ToolExecutionStartEvent(toolCall.getId(), toolCall.getName(), toolCall.getArguments()));
+        fire(new ToolExecutionEndEvent(toolCall.getId(), toolCall.getName(), skippedResult, true));
+        return new ToolResultMessage(
+                toolCall.getId(),
+                toolCall.getName(),
+                skippedResult.getContent(),
+                skippedResult.getDetails(),
+                true);
+    }
+
+    private List<AgentMessage> dequeueSteeringMessages() {
+        return dequeueMessages(steeringQueue, options.getSteeringMode());
+    }
+
+    private List<AgentMessage> dequeueFollowUpMessages() {
+        return dequeueMessages(followUpQueue, options.getFollowUpMode());
+    }
+
+    private List<AgentMessage> dequeueMessages(Queue<AgentMessage> queue, String mode) {
+        AgentMessage first = queue.poll();
+        if (first == null) {
+            return Collections.emptyList();
+        }
+        if ("one-at-a-time".equals(mode)) {
+            return Collections.singletonList(first);
+        }
+        List<AgentMessage> all = new ArrayList<AgentMessage>();
+        all.add(first);
+        AgentMessage next;
+        while ((next = queue.poll()) != null) {
+            all.add(next);
+        }
+        return all;
     }
 
     private List<ToolCallContent> extractToolCalls(AssistantMessage assistant) {
@@ -465,6 +528,16 @@ public class Agent {
         }
         if (model == null) {
             throw new IllegalStateException("Agent model is not configured");
+        }
+    }
+
+    private static final class ToolExecutionResult {
+        private final List<ToolResultMessage> toolResults;
+        private final List<AgentMessage> steeringMessages;
+
+        private ToolExecutionResult(List<ToolResultMessage> toolResults, List<AgentMessage> steeringMessages) {
+            this.toolResults = toolResults;
+            this.steeringMessages = steeringMessages;
         }
     }
 }

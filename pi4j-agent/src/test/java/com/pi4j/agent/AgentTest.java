@@ -1,5 +1,6 @@
 package com.pi4j.agent;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,6 +40,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -212,6 +214,174 @@ class AgentTest {
         assertTrue(hasToolResult);
     }
 
+    @Test
+    void steeringModeOneAtATimeConsumesOnePerTurn() throws Exception {
+        ApiRegistry.register(new StaticProvider(false));
+        Model model = buildModel();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .steeringMode("one-at-a-time")
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.appendMessage(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("base")))));
+        agent.steer(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("s1")))));
+        agent.steer(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("s2")))));
+
+        agent.continueExecution().get();
+        assertEquals(2, countAssistantMessages(agent.getState().getMessages()));
+    }
+
+    @Test
+    void steeringModeAllConsumesInSingleTurn() throws Exception {
+        ApiRegistry.register(new StaticProvider(false));
+        Model model = buildModel();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .steeringMode("all")
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.appendMessage(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("base")))));
+        agent.steer(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("s1")))));
+        agent.steer(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("s2")))));
+
+        agent.continueExecution().get();
+        assertEquals(1, countAssistantMessages(agent.getState().getMessages()));
+    }
+
+    @Test
+    void followUpModeOneAtATimeConsumesOnePerOuterLoop() throws Exception {
+        ApiRegistry.register(new StaticProvider(false));
+        Model model = buildModel();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .followUpMode("one-at-a-time")
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.appendMessage(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("base")))));
+        agent.followUp(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("f1")))));
+        agent.followUp(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("f2")))));
+
+        agent.continueExecution().get();
+        assertEquals(3, countAssistantMessages(agent.getState().getMessages()));
+    }
+
+    @Test
+    void steeringAfterToolSkipsRemainingToolCalls() throws Exception {
+        ApiRegistry.register(new MultiToolProvider());
+        Model model = buildModel();
+
+        AtomicReference<Agent> agentRef = new AtomicReference<Agent>();
+        AgentTool tool = new AgentTool() {
+            @Override
+            public String getName() {
+                return "sum";
+            }
+
+            @Override
+            public String getDescription() {
+                return "sum numbers";
+            }
+
+            @Override
+            public String getLabel() {
+                return "sum";
+            }
+
+            @Override
+            public JsonObject getParameters() {
+                JsonObject schema = new JsonObject();
+                schema.addProperty("type", "object");
+                JsonObject props = new JsonObject();
+                JsonObject a = new JsonObject();
+                a.addProperty("type", "integer");
+                JsonObject b = new JsonObject();
+                b.addProperty("type", "integer");
+                props.add("a", a);
+                props.add("b", b);
+                schema.add("properties", props);
+                JsonArray required = new JsonArray();
+                required.add("a");
+                required.add("b");
+                schema.add("required", required);
+                return schema;
+            }
+
+            @Override
+            public AgentToolResult execute(
+                    String toolCallId,
+                    Map<String, Object> params,
+                    AbortHandle abortHandle,
+                    ToolUpdateCallback onUpdate) {
+                if ("call_1".equals(toolCallId)) {
+                    Agent currentAgent = agentRef.get();
+                    currentAgent.steer(new LlmAgentMessage(new UserMessage(
+                            Collections.<ContentBlock>singletonList(new TextContent("interrupt")))));
+                }
+                int a = ((Number) params.get("a")).intValue();
+                int b = ((Number) params.get("b")).intValue();
+                return AgentToolResult.text(String.valueOf(a + b));
+            }
+        };
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .tools(Collections.singletonList(tool))
+                .steeringMode("one-at-a-time")
+                .getApiKey(provider -> "test-key")
+                .build());
+        agentRef.set(agent);
+
+        agent.prompt("calc").get();
+
+        int skippedResults = 0;
+        for (AgentMessage message : agent.getState().getMessages()) {
+            if (!(message instanceof LlmAgentMessage)) {
+                continue;
+            }
+            Message llm = ((LlmAgentMessage) message).getMessage();
+            if (llm instanceof ToolResultMessage) {
+                ToolResultMessage toolResult = (ToolResultMessage) llm;
+                if ("call_2".equals(toolResult.getToolCallId()) && toolResult.isError()) {
+                    skippedResults++;
+                }
+            }
+        }
+        assertEquals(1, skippedResults);
+    }
+
+    private Model buildModel() {
+        return new Model(
+                "demo",
+                "Demo",
+                "openai-completions",
+                "openai",
+                "https://api.openai.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                32000,
+                4096,
+                Collections.<String, String>emptyMap());
+    }
+
+    private int countAssistantMessages(List<AgentMessage> messages) {
+        int count = 0;
+        for (AgentMessage message : messages) {
+            if (message instanceof LlmAgentMessage) {
+                if (((LlmAgentMessage) message).getMessage() instanceof AssistantMessage) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
     private static class StaticProvider implements ApiProvider {
         private final boolean withToolCall;
 
@@ -263,6 +433,70 @@ class AgentTest {
             content.add(text);
             AssistantMessage message = new AssistantMessage(
                     content,
+                    getApi(),
+                    model.getProvider(),
+                    model.getId(),
+                    null,
+                    StopReason.STOP,
+                    null);
+            stream.push(new TextStartEvent(0));
+            stream.push(new TextDeltaEvent(0, text.getText(), message));
+            stream.push(new TextEndEvent(0));
+            stream.push(new DoneEvent(StopReason.STOP, message));
+            stream.end(message);
+            return stream;
+        }
+    }
+
+    private static final class MultiToolProvider implements ApiProvider {
+
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            AssistantMessageEventStream stream = new AssistantMessageEventStream();
+            stream.push(new StartEvent());
+
+            int toolResultCount = 0;
+            for (Message message : context.getMessages()) {
+                if (message instanceof ToolResultMessage) {
+                    toolResultCount++;
+                }
+            }
+
+            if (toolResultCount == 0) {
+                List<ContentBlock> content = new ArrayList<ContentBlock>();
+                content.add(new ToolCallContent("call_1", "sum", new java.util.LinkedHashMap<String, Object>() {{
+                    put("a", 1);
+                    put("b", 2);
+                }}));
+                content.add(new ToolCallContent("call_2", "sum", new java.util.LinkedHashMap<String, Object>() {{
+                    put("a", 3);
+                    put("b", 4);
+                }}));
+                AssistantMessage message = new AssistantMessage(
+                        content,
+                        getApi(),
+                        model.getProvider(),
+                        model.getId(),
+                        null,
+                        StopReason.TOOL_USE,
+                        null);
+                stream.push(new ToolCallStartEvent(0));
+                stream.push(new ToolCallEndEvent(0, (ToolCallContent) content.get(0), message));
+                stream.push(new ToolCallStartEvent(1));
+                stream.push(new ToolCallEndEvent(1, (ToolCallContent) content.get(1), message));
+                stream.push(new DoneEvent(StopReason.TOOL_USE, message));
+                stream.end(message);
+                return stream;
+            }
+
+            TextContent text = new TextContent("done");
+            AssistantMessage message = new AssistantMessage(
+                    Collections.<ContentBlock>singletonList(text),
                     getApi(),
                     model.getProvider(),
                     model.getId(),
