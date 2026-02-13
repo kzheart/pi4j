@@ -9,6 +9,9 @@ import com.pi4j.agent.func.ApiKeyResolver;
 import com.pi4j.agent.func.ContextTransformer;
 import com.pi4j.agent.func.MessageConverter;
 import com.pi4j.agent.tool.AgentTool;
+import com.pi4j.agent.tool.AgentToolResult;
+import com.pi4j.agent.tool.ToolDispatcher;
+import com.pi4j.agent.tool.ToolMiddleware;
 import com.pi4j.ai.types.ContentBlock;
 import com.pi4j.ai.types.Message;
 import com.pi4j.ai.types.Model;
@@ -31,8 +34,10 @@ class AgentOptionsTest {
         assertNotNull(options.getConvertToLlm());
         assertNotNull(options.getTransformContext());
         assertNotNull(options.getGetApiKey());
+        assertNotNull(options.getToolDispatcher());
         assertTrue(options.getTools().isEmpty());
         assertTrue(options.getInitialMessages().isEmpty());
+        assertTrue(options.getToolMiddlewares().isEmpty());
 
         List<AgentMessage> source = new ArrayList<AgentMessage>();
         UserMessage userMessage = new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hello")));
@@ -95,6 +100,8 @@ class AgentOptionsTest {
         MessageConverter converter = messages -> Collections.<Message>emptyList();
         ContextTransformer transformer = (messages, abortHandle) -> Collections.<AgentMessage>emptyList();
         ApiKeyResolver resolver = provider -> "k-" + provider;
+        ToolDispatcher dispatcher = (context, invocation) -> AgentToolResult.text("dispatched");
+        ToolMiddleware middleware = (context, chain) -> chain.proceed(context);
 
         AgentOptions options = AgentOptions.builder()
                 .systemPrompt("sys")
@@ -114,6 +121,8 @@ class AgentOptionsTest {
                 .sessionId("s-1")
                 .steeringMode("one-at-a-time")
                 .followUpMode("none")
+                .toolDispatcher(dispatcher)
+                .toolMiddlewares(Collections.singletonList(middleware))
                 .build();
 
         assertEquals("sys", options.getSystemPrompt());
@@ -135,5 +144,8 @@ class AgentOptionsTest {
         assertEquals("s-1", options.getSessionId());
         assertEquals("one-at-a-time", options.getSteeringMode());
         assertEquals("none", options.getFollowUpMode());
+        assertSame(dispatcher, options.getToolDispatcher());
+        assertEquals(1, options.getToolMiddlewares().size());
+        assertSame(middleware, options.getToolMiddlewares().get(0));
     }
 }

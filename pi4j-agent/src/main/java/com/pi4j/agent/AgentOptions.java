@@ -4,6 +4,9 @@ import com.pi4j.agent.func.ApiKeyResolver;
 import com.pi4j.agent.func.ContextTransformer;
 import com.pi4j.agent.func.MessageConverter;
 import com.pi4j.agent.tool.AgentTool;
+import com.pi4j.agent.tool.DefaultToolDispatcher;
+import com.pi4j.agent.tool.ToolDispatcher;
+import com.pi4j.agent.tool.ToolMiddleware;
 import com.pi4j.ai.types.Message;
 import com.pi4j.ai.types.Model;
 import java.util.ArrayList;
@@ -28,6 +31,8 @@ public final class AgentOptions {
     private final String sessionId;
     private final String steeringMode;
     private final String followUpMode;
+    private final ToolDispatcher toolDispatcher;
+    private final List<ToolMiddleware> toolMiddlewares;
 
     private AgentOptions(Builder builder) {
         this.systemPrompt = builder.systemPrompt;
@@ -47,6 +52,8 @@ public final class AgentOptions {
         this.sessionId = builder.sessionId;
         this.steeringMode = builder.steeringMode;
         this.followUpMode = builder.followUpMode;
+        this.toolDispatcher = builder.toolDispatcher;
+        this.toolMiddlewares = Collections.unmodifiableList(new ArrayList<ToolMiddleware>(builder.toolMiddlewares));
     }
 
     public static Builder builder() {
@@ -121,6 +128,14 @@ public final class AgentOptions {
         return followUpMode;
     }
 
+    public ToolDispatcher getToolDispatcher() {
+        return toolDispatcher;
+    }
+
+    public List<ToolMiddleware> getToolMiddlewares() {
+        return toolMiddlewares;
+    }
+
     public static final class Builder {
         private String systemPrompt;
         private Model model;
@@ -147,6 +162,8 @@ public final class AgentOptions {
         private String sessionId;
         private String steeringMode = "all";
         private String followUpMode = "all";
+        private ToolDispatcher toolDispatcher = new DefaultToolDispatcher();
+        private List<ToolMiddleware> toolMiddlewares = new ArrayList<ToolMiddleware>();
 
         public Builder systemPrompt(String systemPrompt) {
             this.systemPrompt = systemPrompt;
@@ -230,6 +247,16 @@ public final class AgentOptions {
 
         public Builder followUpMode(String followUpMode) {
             this.followUpMode = followUpMode;
+            return this;
+        }
+
+        public Builder toolDispatcher(ToolDispatcher toolDispatcher) {
+            this.toolDispatcher = toolDispatcher;
+            return this;
+        }
+
+        public Builder toolMiddlewares(List<ToolMiddleware> toolMiddlewares) {
+            this.toolMiddlewares = new ArrayList<ToolMiddleware>(toolMiddlewares);
             return this;
         }
 
