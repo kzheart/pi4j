@@ -20,7 +20,10 @@ import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collections;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
@@ -117,6 +120,23 @@ class OpenAICompletionsProviderTest {
 
         assertNotNull(stream.result().get());
         assertTrue(stream.result().get().getContent().size() >= 2);
+    }
+
+    @Test
+    void buildHttpErrorMessageIncludesResponseBody() throws Exception {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Request request = new Request.Builder().url("https://api.openai.com/v1/chat/completions").build();
+        Response response = new Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(400)
+                .message("Bad Request")
+                .body(ResponseBody.create("{\"error\":\"bad request\"}", okhttp3.MediaType.parse("application/json")))
+                .build();
+
+        String message = provider.buildHttpErrorMessage("OpenAI request failed", response);
+        assertTrue(message.contains("400"));
+        assertTrue(message.contains("bad request"));
     }
 
     private JsonObject readPayload(Request request) {

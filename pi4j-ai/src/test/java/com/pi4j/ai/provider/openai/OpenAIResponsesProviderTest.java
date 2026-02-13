@@ -19,7 +19,10 @@ import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collections;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
@@ -136,6 +139,23 @@ class OpenAIResponsesProviderTest {
 
         assertNotNull(stream.result().get());
         assertTrue(stream.result().get().getContent().size() >= 1);
+    }
+
+    @Test
+    void buildHttpErrorMessageIncludesResponseBody() throws Exception {
+        OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
+        Request request = new Request.Builder().url("https://api.openai.com/v1/responses").build();
+        Response response = new Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(429)
+                .message("Too Many Requests")
+                .body(ResponseBody.create("{\"error\":\"rate limit\"}", okhttp3.MediaType.parse("application/json")))
+                .build();
+
+        String message = provider.buildHttpErrorMessage("OpenAI responses request failed", response);
+        assertTrue(message.contains("429"));
+        assertTrue(message.contains("rate limit"));
     }
 
     private JsonObject readPayload(Request request) {

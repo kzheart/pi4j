@@ -35,4 +35,18 @@ class EventStreamTest {
         ExecutionException exception = assertThrows(ExecutionException.class, () -> stream.result().get());
         assertTrue(exception.getCause() instanceof IllegalStateException);
     }
+
+    @Test
+    void subscribeReplaysHistoryAndReceivesSubsequentEvents() {
+        EventStream<String, String> stream = new EventStream<String, String>();
+        stream.push("first");
+
+        List<String> received = new ArrayList<String>();
+        stream.subscribe(received::add);
+        stream.push("second");
+
+        assertEquals(2, received.size());
+        assertEquals("first", received.get(0));
+        assertEquals("second", received.get(1));
+    }
 }

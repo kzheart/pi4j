@@ -82,16 +82,30 @@ public class AnthropicProvider implements ApiProvider {
     private void invokeStream(AssistantMessageEventStream stream, Model model, Context context, StreamOptions options) {
         AbortHandle abortHandle = options.getAbortHandle();
         try {
-            Request request = buildRequest(model, context, options);
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    throw new IllegalStateException("Anthropic request failed: " + response.code());
-                }
-                if (response.body() == null) {
-                    throw new IllegalStateException("Anthropic response body is empty");
-                }
+            IOException parseError = null;
+            for (int attempt = 0; attempt < 2; attempt++) {
+                Request request = buildRequest(model, context, options);
+                try (Response response = client.newCall(request).execute()) {
+                    if (!response.isSuccessful()) {
+                        throw new IllegalStateException(buildHttpErrorMessage("Anthropic request failed", response));
+                    }
+                    if (response.body() == null) {
+                        throw new IllegalStateException("Anthropic response body is empty");
+                    }
 
-                parseSse(response.body().charStream(), stream, model, abortHandle);
+                    try {
+                        parseSse(response.body().charStream(), stream, model, abortHandle);
+                        return;
+                    } catch (IOException ioException) {
+                        parseError = ioException;
+                        if (attempt == 1 || abortHandle.isAborted()) {
+                            throw ioException;
+                        }
+                    }
+                }
+            }
+            if (parseError != null) {
+                throw parseError;
             }
         } catch (Exception ex) {
             AssistantMessage errorMessage = new AssistantMessage(
@@ -105,6 +119,17 @@ public class AnthropicProvider implements ApiProvider {
             stream.push(new ErrorEvent(errorMessage.getStopReason(), errorMessage));
             stream.error(ex);
         }
+    }
+
+    String buildHttpErrorMessage(String prefix, Response response) throws IOException {
+        String body = response.body() == null ? "" : response.body().string();
+        if (body.length() > 512) {
+            body = body.substring(0, 512);
+        }
+        if (body.isEmpty()) {
+            body = "(no body)";
+        }
+        return prefix + ": " + response.code() + " " + body;
     }
 
     Request buildRequest(Model model, Context context, StreamOptions options) {

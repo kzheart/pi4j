@@ -23,7 +23,10 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import okio.Buffer;
 import org.junit.jupiter.api.Test;
 
@@ -159,6 +162,23 @@ class AnthropicProviderTest {
         assertEquals(1, stream.result().get().getContent().size());
         TextContent text = (TextContent) stream.result().get().getContent().get(0);
         assertEquals("hello", text.getText());
+    }
+
+    @Test
+    void buildHttpErrorMessageIncludesResponseBody() throws Exception {
+        AnthropicProvider provider = new AnthropicProvider(new OkHttpClient());
+        Request request = new Request.Builder().url("https://api.anthropic.com/v1/messages").build();
+        Response response = new Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(400)
+                .message("Bad Request")
+                .body(ResponseBody.create("{\"type\":\"error\",\"message\":\"too long\"}", okhttp3.MediaType.parse("application/json")))
+                .build();
+
+        String message = provider.buildHttpErrorMessage("Anthropic request failed", response);
+        assertTrue(message.contains("400"));
+        assertTrue(message.contains("too long"));
     }
 
     private JsonObject readPayload(Request request) {
