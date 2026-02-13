@@ -32,6 +32,7 @@ import com.pi4j.ai.types.StopReason;
 import com.pi4j.ai.types.TextContent;
 import com.pi4j.ai.types.ToolCallContent;
 import com.pi4j.ai.types.ToolResultMessage;
+import com.pi4j.ai.types.UserMessage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -75,6 +76,38 @@ class AgentTest {
         AgentState state = agent.getState();
         assertFalse(state.getMessages().isEmpty());
         assertFalse(state.isStreaming());
+    }
+
+    @Test
+    void agentLoopRunExecutesRealLoop() throws Exception {
+        ApiRegistry.register(new StaticProvider(false));
+
+        Model model = new Model(
+                "demo",
+                "Demo",
+                "openai-completions",
+                "openai",
+                "https://api.openai.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                32000,
+                4096,
+                Collections.<String, String>emptyMap());
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.appendMessage(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hello")))));
+
+        List<AgentMessage> loopMessages = AgentLoop.run(Collections.<AgentMessage>emptyList(), agent, new AbortHandle())
+                .result()
+                .get();
+
+        assertTrue(loopMessages.size() >= 2);
+        assertTrue(loopMessages.get(loopMessages.size() - 1) instanceof LlmAgentMessage);
     }
 
     @Test

@@ -229,13 +229,35 @@ public class Agent {
         AbortHandle abortHandle = new AbortHandle();
         runningAbortHandle = abortHandle;
         fireState();
-        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> executeLoop(abortHandle), executor);
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            try {
+                AgentLoop.run(Collections.<AgentMessage>emptyList(), this, abortHandle).result().get();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(interrupted);
+            } catch (ExecutionException executionException) {
+                Throwable cause = executionException.getCause();
+                throw new RuntimeException(cause == null ? executionException : cause);
+            }
+        }, executor);
         runningFuture = future.whenComplete((unused, throwable) -> {
             streaming = false;
             runningAbortHandle = null;
             fireState();
         });
         return runningFuture;
+    }
+
+    void executeLoopFromLoop(AbortHandle abortHandle) {
+        executeLoop(abortHandle);
+    }
+
+    List<AgentMessage> snapshotMessagesFromLoop() {
+        return copyMessages();
+    }
+
+    void appendMessageFromLoop(AgentMessage message) {
+        appendMessageInternal(message);
     }
 
     private void executeLoop(AbortHandle abortHandle) {

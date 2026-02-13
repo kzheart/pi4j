@@ -14,7 +14,17 @@ final class AgentLoop {
             Agent agent,
             AbortHandle abortHandle) {
         EventStream<AgentEvent, List<AgentMessage>> stream = new EventStream<AgentEvent, List<AgentMessage>>();
-        stream.end(prompts);
+        try {
+            if (prompts != null && !prompts.isEmpty()) {
+                for (AgentMessage prompt : prompts) {
+                    agent.appendMessageFromLoop(prompt);
+                }
+            }
+            agent.executeLoopFromLoop(abortHandle);
+            stream.end(agent.snapshotMessagesFromLoop());
+        } catch (Exception ex) {
+            stream.error(ex);
+        }
         return stream;
     }
 }
