@@ -3,22 +3,19 @@ package com.pi4j.agent;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.pi4j.agent.event.AgentEvent;
 import com.pi4j.agent.event.MessageEndEvent;
-import com.pi4j.agent.event.MessageUpdateEvent;
 import com.pi4j.agent.event.ToolExecutionEndEvent;
-import com.pi4j.agent.event.ToolExecutionStartEvent;
 import com.pi4j.agent.tool.AgentTool;
 import com.pi4j.agent.tool.AgentToolResult;
 import com.pi4j.agent.tool.ToolUpdateCallback;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.openai.OpenAICompletionsProvider;
-import com.pi4j.ai.stream.AssistantMessageEvent;
-import com.pi4j.ai.stream.TextDeltaEvent;
-import com.pi4j.ai.stream.ToolCallDeltaEvent;
 import com.pi4j.ai.types.AssistantMessage;
 import com.pi4j.ai.types.ContentBlock;
 import com.pi4j.ai.types.Message;
@@ -41,6 +38,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 class AgentDeepSeekIntegrationTest {
+    private static final Gson RAW_LOG_GSON = new GsonBuilder().disableHtmlEscaping().create();
+
 
     @AfterEach
     void cleanup() {
@@ -335,10 +334,6 @@ class AgentDeepSeekIntegrationTest {
             final int attemptNo = attempt;
             List<AgentEvent> events = new CopyOnWriteArrayList<AgentEvent>();
             List<AgentState> states = new CopyOnWriteArrayList<AgentState>();
-            AtomicInteger stateIndex = new AtomicInteger();
-            StringBuilder streamedOutput = new StringBuilder();
-            StringBuilder toolCallOutput = new StringBuilder();
-            long startAt = System.currentTimeMillis();
 
             Agent agent = new Agent(AgentOptions.builder()
                     .model(deepSeekOpenAiModel())
@@ -350,57 +345,19 @@ class AgentDeepSeekIntegrationTest {
                     .toolChoice("auto")
                     .build());
 
-            agent.subscribeState(state -> {
-                states.add(state);
-                int index = stateIndex.incrementAndGet();
-                long elapsed = System.currentTimeMillis() - startAt;
-                System.out.println(String.format(
-                        "STATE_TRACE attempt=%d idx=%d elapsedMs=%d streaming=%s pending=%d messages=%d error=%s",
-                        attemptNo,
-                        index,
-                        elapsed,
-                        state.isStreaming(),
-                        state.getPendingToolCalls().size(),
-                        state.getMessages().size(),
-                        state.getError()));
-            });
+            agent.subscribeState(states::add);
 
             agent.subscribe(event -> {
                 events.add(event);
-                if (event instanceof ToolExecutionStartEvent) {
-                    ToolExecutionStartEvent startEvent = (ToolExecutionStartEvent) event;
-                    System.out.println("TOOL_START attempt=" + attemptNo + " name=" + startEvent.getToolName()
-                            + " args=" + startEvent.getArgs());
-                } else if (event instanceof ToolExecutionEndEvent) {
-                    ToolExecutionEndEvent endEvent = (ToolExecutionEndEvent) event;
-                    System.out.println("TOOL_END attempt=" + attemptNo + " name=" + endEvent.getToolName()
-                            + " error=" + endEvent.isError() + " content=" + endEvent.getResult().getContent());
-                } else if (event instanceof MessageUpdateEvent) {
-                    AssistantMessageEvent assistantEvent =
-                            ((MessageUpdateEvent) event).getAssistantMessageEvent();
-                    if (assistantEvent instanceof TextDeltaEvent) {
-                        String delta = ((TextDeltaEvent) assistantEvent).getDelta();
-                        if (!delta.isEmpty()) {
-                            streamedOutput.append(delta);
-                            System.out.print(delta);
-                        }
-                    } else if (assistantEvent instanceof ToolCallDeltaEvent) {
-                        String delta = ((ToolCallDeltaEvent) assistantEvent).getDelta();
-                        if (!delta.isEmpty()) {
-                            toolCallOutput.append(delta);
-                            System.out.println("MODEL_TOOL_CALL_DELTA attempt=" + attemptNo + " delta=" + delta);
-                        }
-                    }
-                } else if (event instanceof MessageEndEvent) {
+                if (event instanceof MessageEndEvent) {
                     AgentMessage message = ((MessageEndEvent) event).getMessage();
-                    String summary = summarizeAssistantMessage(message);
-                    if (!summary.isEmpty()) {
-                        System.out.println("MODEL_TURN_END attempt=" + attemptNo + " " + summary);
+                    String rawMessage = extractAssistantRawMessage(message);
+                    if (rawMessage != null) {
+                        printZhLog("模型原始消息 尝试=" + attemptNo + " 内容=" + rawMessage);
                     }
                 }
             });
 
-            System.out.println("\n=== COMPLEX_AGENT_ATTEMPT " + attemptNo + " ===");
             agent.prompt(
                             "请按顺序完成复杂任务："
                                     + "1) 先调用 extract_numbers，payload='批次A数据: 12, 7, 31, 5, 19, 20'；"
@@ -410,9 +367,6 @@ class AgentDeepSeekIntegrationTest {
                     .get(180, TimeUnit.SECONDS);
 
             String finalOutput = extractLatestAssistantText(agent.getState().getMessages());
-            System.out.println("\nMODEL_OUTPUT_STREAM=" + streamedOutput.toString());
-            System.out.println("MODEL_TOOL_CALL_OUTPUT=" + toolCallOutput.toString());
-            System.out.println("MODEL_OUTPUT_FINAL=" + finalOutput);
 
             Set<String> executedTools = executedToolNames(events);
             complexFlowSuccess = executedTools.contains("extract_numbers")
@@ -428,40 +382,19 @@ class AgentDeepSeekIntegrationTest {
         assertTrue(complexFlowSuccess);
     }
 
-    private String summarizeAssistantMessage(AgentMessage agentMessage) {
+    private String extractAssistantRawMessage(AgentMessage agentMessage) {
         if (!(agentMessage instanceof LlmAgentMessage)) {
-            return "";
+            return null;
         }
         Message message = ((LlmAgentMessage) agentMessage).getMessage();
         if (!(message instanceof AssistantMessage)) {
-            return "";
+            return null;
         }
+        return RAW_LOG_GSON.toJson(message);
+    }
 
-        List<String> texts = new ArrayList<String>();
-        List<String> toolCalls = new ArrayList<String>();
-        for (ContentBlock block : ((AssistantMessage) message).getContent()) {
-            if (block instanceof TextContent) {
-                String text = ((TextContent) block).getText();
-                if (text != null && !text.trim().isEmpty()) {
-                    texts.add(text.trim());
-                }
-            } else if (block instanceof ToolCallContent) {
-                ToolCallContent toolCall = (ToolCallContent) block;
-                toolCalls.add(toolCall.getName() + toolCall.getArguments());
-            }
-        }
-
-        StringBuilder summary = new StringBuilder();
-        if (!texts.isEmpty()) {
-            summary.append("text=").append(String.join(" | ", texts));
-        }
-        if (!toolCalls.isEmpty()) {
-            if (summary.length() > 0) {
-                summary.append(" ; ");
-            }
-            summary.append("toolCalls=").append(toolCalls);
-        }
-        return summary.toString();
+    private void printZhLog(String message) {
+        System.out.println("<" + message + ">");
     }
 
     private String requireApiKey() {
