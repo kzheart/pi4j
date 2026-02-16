@@ -288,7 +288,6 @@ public class Agent {
 
                 while (hasMoreToolCalls || !pendingMessages.isEmpty()) {
                     abortHandle.throwIfAborted();
-                    fire(new TurnStartEvent());
 
                     if (!pendingMessages.isEmpty()) {
                         for (AgentMessage message : pendingMessages) {
@@ -300,6 +299,7 @@ public class Agent {
                     List<AgentMessage> transformed = options.getTransformContext().transform(copyMessages(), abortHandle);
                     List<Message> llmMessages = options.getConvertToLlm().convert(transformed);
                     Context context = new Context(systemPrompt, llmMessages, toToolDefs());
+                    fire(new TurnStartEvent(context));
                     String apiKey = options.getGetApiKey().resolve(model.getProvider());
 
                     StreamOptions streamOptions = StreamOptions.builder()
