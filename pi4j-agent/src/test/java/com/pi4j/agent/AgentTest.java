@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.pi4j.agent.event.AgentEvent;
+import com.pi4j.agent.event.MessageUpdateEvent;
 import com.pi4j.agent.event.ToolExecutionEndEvent;
 import com.pi4j.agent.event.ToolExecutionStartEvent;
 import com.pi4j.agent.tool.AgentTool;
@@ -79,6 +80,100 @@ class AgentTest {
         AgentState state = agent.getState();
         assertFalse(state.getMessages().isEmpty());
         assertFalse(state.isStreaming());
+    }
+
+    @Test
+    void promptEmitsMessageUpdateEventsForTextDeltas() throws Exception {
+        ApiRegistry.register(new StaticProvider(false));
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+        List<MessageUpdateEvent> updates = new CopyOnWriteArrayList<MessageUpdateEvent>();
+        agent.subscribe(event -> {
+            if (event instanceof MessageUpdateEvent) {
+                updates.add((MessageUpdateEvent) event);
+            }
+        });
+
+        agent.prompt("hello").get();
+
+        assertFalse(updates.isEmpty());
+        AgentMessage updateMessage = null;
+        boolean hasTextDelta = false;
+        for (MessageUpdateEvent update : updates) {
+            if (updateMessage == null) {
+                updateMessage = update.getMessage();
+            } else {
+                assertTrue(update.getMessage() == updateMessage);
+            }
+            if (update.getAssistantMessageEvent() instanceof TextDeltaEvent) {
+                hasTextDelta = true;
+            }
+        }
+        assertTrue(hasTextDelta);
+    }
+
+    @Test
+    void messageUpdateEventsDoNotReusePreviousTurnFinalMessage() throws Exception {
+        ApiRegistry.register(new StaticProvider(true));
+
+        AgentTool tool = ToolSpec.builder("sum")
+                .description("sum numbers")
+                .label("sum")
+                .integerParam("a", true, "first")
+                .integerParam("b", true, "second")
+                .handler((toolCallId, args, abortHandle, onUpdate) -> AgentToolResult.text(String.valueOf(
+                        args.requireInt("a") + args.requireInt("b"))))
+                .build()
+                .toAgentTool();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .tools(Collections.singletonList(tool))
+                .getApiKey(provider -> "test-key")
+                .build());
+        List<MessageUpdateEvent> updates = new CopyOnWriteArrayList<MessageUpdateEvent>();
+        agent.subscribe(event -> {
+            if (event instanceof MessageUpdateEvent) {
+                updates.add((MessageUpdateEvent) event);
+            }
+        });
+
+        agent.prompt("calc").get();
+
+        AgentMessage firstAssistantMessage = null;
+        int assistantCount = 0;
+        for (AgentMessage message : agent.getState().getMessages()) {
+            if (!(message instanceof LlmAgentMessage)) {
+                continue;
+            }
+            Message llm = ((LlmAgentMessage) message).getMessage();
+            if (!(llm instanceof AssistantMessage)) {
+                continue;
+            }
+            assistantCount++;
+            if (firstAssistantMessage == null) {
+                firstAssistantMessage = message;
+            }
+        }
+        assertEquals(2, assistantCount);
+        assertTrue(firstAssistantMessage != null);
+        assertFalse(updates.isEmpty());
+
+        boolean reusedPreviousTurnFinalMessage = false;
+        boolean hasTextDelta = false;
+        for (MessageUpdateEvent update : updates) {
+            if (update.getMessage() == firstAssistantMessage) {
+                reusedPreviousTurnFinalMessage = true;
+            }
+            if (update.getAssistantMessageEvent() instanceof TextDeltaEvent) {
+                hasTextDelta = true;
+            }
+        }
+        assertFalse(reusedPreviousTurnFinalMessage);
+        assertTrue(hasTextDelta);
     }
 
     @Test

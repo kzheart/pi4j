@@ -3,7 +3,7 @@ import org.gradle.api.publish.maven.MavenPublication
 
 allprojects {
     group = "com.pi4j"
-    version = "1.0.6-SNAPSHOT"
+    version = "1.0.7-SNAPSHOT"
 
     repositories {
         mavenCentral()

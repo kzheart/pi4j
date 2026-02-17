@@ -315,13 +315,11 @@ public class Agent {
                             .abortHandle(abortHandle)
                             .build();
 
+                    AgentMessage currentTurnStreamMessage = createStreamingMessagePlaceholder();
+                    streamMessage = currentTurnStreamMessage;
+                    fireState();
                     AssistantMessageEventStream responseStream = ApiRegistry.stream(model, context, streamOptions);
-                    responseStream.subscribe(event -> {
-                        AgentMessage current = streamMessage;
-                        if (current != null) {
-                            fire(new MessageUpdateEvent(current, event));
-                        }
-                    });
+                    responseStream.subscribe(event -> fire(new MessageUpdateEvent(currentTurnStreamMessage, event)));
 
                     AssistantMessage assistant = waitStream(responseStream);
                     LlmAgentMessage assistantMessage = new LlmAgentMessage(assistant);
@@ -393,6 +391,18 @@ public class Agent {
     private AssistantMessage waitStream(AssistantMessageEventStream responseStream)
             throws InterruptedException, ExecutionException {
         return responseStream.result().get();
+    }
+
+    private AgentMessage createStreamingMessagePlaceholder() {
+        AssistantMessage placeholder = new AssistantMessage(
+                Collections.<ContentBlock>emptyList(),
+                model.getApi(),
+                model.getProvider(),
+                model.getId(),
+                null,
+                null,
+                null);
+        return new LlmAgentMessage(placeholder);
     }
 
     private ToolExecutionResult executeToolCalls(List<ToolCallContent> toolCalls, AbortHandle abortHandle) {
