@@ -309,6 +309,7 @@ public class Agent {
                             .thinkingEffort(resolveThinkingEffort())
                             .temperature(options.getTemperature())
                             .maxTokens(options.getMaxTokens())
+                            .responseFormat(options.getResponseFormat())
                             .toolChoice(options.getToolChoice())
                             .cacheRetention(options.getCacheRetention())
                             .sessionId(options.getSessionId())

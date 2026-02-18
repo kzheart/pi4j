@@ -11,6 +11,7 @@ public final class StreamOptions {
     private final String reasoning;
     private final Integer thinkingBudget;
     private final String thinkingEffort;
+    private final String responseFormat;
     private final String toolChoice;
     private final String cacheRetention;
     private final String sessionId;
@@ -24,6 +25,7 @@ public final class StreamOptions {
         this.reasoning = builder.reasoning;
         this.thinkingBudget = builder.thinkingBudget;
         this.thinkingEffort = builder.thinkingEffort;
+        this.responseFormat = builder.responseFormat;
         this.toolChoice = builder.toolChoice;
         this.cacheRetention = builder.cacheRetention;
         this.sessionId = builder.sessionId;
@@ -59,6 +61,10 @@ public final class StreamOptions {
         return thinkingEffort;
     }
 
+    public String getResponseFormat() {
+        return responseFormat;
+    }
+
     public String getToolChoice() {
         return toolChoice;
     }
@@ -86,6 +92,7 @@ public final class StreamOptions {
         private String reasoning;
         private Integer thinkingBudget;
         private String thinkingEffort;
+        private String responseFormat;
         private String toolChoice;
         private String cacheRetention;
         private String sessionId;
@@ -119,6 +126,11 @@ public final class StreamOptions {
 
         public Builder thinkingEffort(String thinkingEffort) {
             this.thinkingEffort = thinkingEffort;
+            return this;
+        }
+
+        public Builder responseFormat(String responseFormat) {
+            this.responseFormat = responseFormat;
             return this;
         }
 

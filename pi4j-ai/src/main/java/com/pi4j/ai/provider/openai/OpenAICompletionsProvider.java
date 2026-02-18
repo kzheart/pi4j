@@ -152,6 +152,11 @@ public class OpenAICompletionsProvider implements ApiProvider {
         if (options.getTemperature() != null) {
             payload.addProperty("temperature", options.getTemperature());
         }
+        if (options.getResponseFormat() != null && !options.getResponseFormat().trim().isEmpty()) {
+            JsonObject responseFormat = new JsonObject();
+            responseFormat.addProperty("type", options.getResponseFormat().trim());
+            payload.add("response_format", responseFormat);
+        }
         if (options.getThinkingEffort() != null && !options.getThinkingEffort().isEmpty() && compat.isSupportsReasoningEffort()) {
             if ("zai".equals(compat.getThinkingFormat())) {
                 payload.addProperty("reasoning", options.getThinkingEffort());

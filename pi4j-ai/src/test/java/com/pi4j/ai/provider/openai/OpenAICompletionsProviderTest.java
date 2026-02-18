@@ -95,6 +95,37 @@ class OpenAICompletionsProviderTest {
     }
 
     @Test
+    void buildRequestIncludesResponseFormatWhenRequested() {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Model model = new Model(
+                "deepseek-chat",
+                "DeepSeek Chat",
+                "openai-completions",
+                "deepseek",
+                "https://api.deepseek.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                64000,
+                4096,
+                Collections.<String, String>emptyMap());
+
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .responseFormat("json_object")
+                .build());
+
+        JsonObject payload = readPayload(request);
+        assertTrue(payload.has("response_format"));
+        assertEquals("json_object", payload.getAsJsonObject("response_format").get("type").getAsString());
+    }
+
+    @Test
     void parseSseParsesTextAndToolCall() throws Exception {
         OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
         Model model = new Model(

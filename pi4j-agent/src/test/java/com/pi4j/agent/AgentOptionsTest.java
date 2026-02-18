@@ -2,6 +2,7 @@ package com.pi4j.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,6 +40,7 @@ class AgentOptionsTest {
         assertTrue(options.getTools().isEmpty());
         assertTrue(options.getInitialMessages().isEmpty());
         assertTrue(options.getToolMiddlewares().isEmpty());
+        assertNull(options.getResponseFormat());
 
         List<AgentMessage> source = new ArrayList<AgentMessage>();
         UserMessage userMessage = new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hello")));
@@ -117,6 +119,7 @@ class AgentOptionsTest {
                 .maxTokens(321)
                 .thinkingBudget(123)
                 .thinkingEffort("medium")
+                .responseFormat("json_object")
                 .toolChoice("required")
                 .cacheRetention("long")
                 .sessionId("s-1")
@@ -140,6 +143,7 @@ class AgentOptionsTest {
         assertEquals(Integer.valueOf(321), options.getMaxTokens());
         assertEquals(Integer.valueOf(123), options.getThinkingBudget());
         assertEquals("medium", options.getThinkingEffort());
+        assertEquals("json_object", options.getResponseFormat());
         assertEquals("required", options.getToolChoice());
         assertEquals("long", options.getCacheRetention());
         assertEquals("s-1", options.getSessionId());
