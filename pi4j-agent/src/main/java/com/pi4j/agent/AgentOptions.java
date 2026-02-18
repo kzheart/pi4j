@@ -1,5 +1,6 @@
 package com.pi4j.agent;
 
+import com.google.gson.JsonObject;
 import com.pi4j.agent.func.ApiKeyResolver;
 import com.pi4j.agent.func.ContextTransformer;
 import com.pi4j.agent.func.MessageConverter;
@@ -26,7 +27,7 @@ public final class AgentOptions {
     private final Integer maxTokens;
     private final Integer thinkingBudget;
     private final String thinkingEffort;
-    private final String responseFormat;
+    private final JsonObject responseFormat;
     private final String toolChoice;
     private final String cacheRetention;
     private final String sessionId;
@@ -110,7 +111,7 @@ public final class AgentOptions {
         return thinkingEffort;
     }
 
-    public String getResponseFormat() {
+    public JsonObject getResponseFormat() {
         return responseFormat;
     }
 
@@ -163,7 +164,7 @@ public final class AgentOptions {
         private Integer maxTokens;
         private Integer thinkingBudget;
         private String thinkingEffort;
-        private String responseFormat;
+        private JsonObject responseFormat;
         private String toolChoice;
         private String cacheRetention;
         private String sessionId;
@@ -232,8 +233,19 @@ public final class AgentOptions {
             return this;
         }
 
-        public Builder responseFormat(String responseFormat) {
+        public Builder responseFormat(JsonObject responseFormat) {
             this.responseFormat = responseFormat;
+            return this;
+        }
+
+        public Builder responseFormat(String responseFormat) {
+            if (responseFormat == null) {
+                this.responseFormat = null;
+            } else {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("type", responseFormat);
+                this.responseFormat = obj;
+            }
             return this;
         }
 

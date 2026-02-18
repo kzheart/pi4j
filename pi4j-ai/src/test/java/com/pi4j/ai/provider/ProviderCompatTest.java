@@ -47,6 +47,16 @@ class ProviderCompatTest {
     }
 
     @Test
+    void detectBailianCompat() {
+        ProviderCompat.OpenAiCompletionsCompat compat = ProviderCompat.detectOpenAiCompletionsCompat(
+                model("bailian", "https://dashscope.aliyuncs.com/compatible-mode"));
+        assertEquals("max_tokens", compat.getMaxTokensField());
+        assertFalse(compat.isSupportsStore());
+        assertFalse(compat.isSupportsDeveloperRole());
+        assertTrue(ProviderCompat.isOpenAiCompatible("bailian"));
+    }
+
+    @Test
     void openAiCompatibleProviderMatrix() {
         assertTrue(ProviderCompat.isOpenAiCompatible("openrouter"));
         assertTrue(ProviderCompat.isOpenAiCompatible("ollama"));

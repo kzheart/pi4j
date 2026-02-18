@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.JsonObject;
 import com.pi4j.agent.func.ApiKeyResolver;
 import com.pi4j.agent.func.ContextTransformer;
 import com.pi4j.agent.func.MessageConverter;
@@ -143,7 +144,7 @@ class AgentOptionsTest {
         assertEquals(Integer.valueOf(321), options.getMaxTokens());
         assertEquals(Integer.valueOf(123), options.getThinkingBudget());
         assertEquals("medium", options.getThinkingEffort());
-        assertEquals("json_object", options.getResponseFormat());
+        assertEquals("json_object", options.getResponseFormat().get("type").getAsString());
         assertEquals("required", options.getToolChoice());
         assertEquals("long", options.getCacheRetention());
         assertEquals("s-1", options.getSessionId());
@@ -152,6 +153,21 @@ class AgentOptionsTest {
         assertSame(dispatcher, options.getToolDispatcher());
         assertEquals(1, options.getToolMiddlewares().size());
         assertSame(middleware, options.getToolMiddlewares().get(0));
+    }
+
+    @Test
+    void builderAcceptsJsonObjectResponseFormat() {
+        JsonObject schema = new JsonObject();
+        schema.addProperty("type", "json_schema");
+        JsonObject jsonSchema = new JsonObject();
+        jsonSchema.addProperty("name", "my_schema");
+        schema.add("json_schema", jsonSchema);
+
+        AgentOptions options = AgentOptions.builder()
+                .responseFormat(schema)
+                .build();
+
+        assertSame(schema, options.getResponseFormat());
     }
 
     @Test

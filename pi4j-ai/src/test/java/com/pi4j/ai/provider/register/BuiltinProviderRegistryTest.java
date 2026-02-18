@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.anthropic.AnthropicProvider;
+import com.pi4j.ai.provider.bailian.BailianProvider;
 import com.pi4j.ai.provider.customopenai.CustomOpenAIProvider;
 import com.pi4j.ai.provider.google.GoogleProvider;
 import com.pi4j.ai.provider.google.GoogleVertexProvider;
@@ -45,6 +46,7 @@ class BuiltinProviderRegistryTest {
         assertTrue(ApiRegistry.getProvider("openai-completions", "openrouter") instanceof OpenRouterProvider);
         assertTrue(ApiRegistry.getProvider("openai-completions", "ollama") instanceof OllamaProvider);
         assertTrue(ApiRegistry.getProvider("openai-completions", "custom-openai") instanceof CustomOpenAIProvider);
+        assertTrue(ApiRegistry.getProvider("openai-completions", "bailian") instanceof BailianProvider);
         assertTrue(ApiRegistry.getProvider("openai-completions", "unknown") instanceof OpenAICompletionsProvider);
     }
 }

@@ -2,6 +2,7 @@ package com.pi4j.ai.provider.register;
 
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.anthropic.AnthropicProvider;
+import com.pi4j.ai.provider.bailian.BailianProvider;
 import com.pi4j.ai.provider.customopenai.CustomOpenAIProvider;
 import com.pi4j.ai.provider.google.GoogleProvider;
 import com.pi4j.ai.provider.google.GoogleVertexProvider;
@@ -32,5 +33,6 @@ public final class BuiltinProviderRegistry {
         ApiRegistry.register("openai-completions", "openrouter", new OpenRouterProvider());
         ApiRegistry.register("openai-completions", "ollama", new OllamaProvider());
         ApiRegistry.register("openai-completions", "custom-openai", new CustomOpenAIProvider());
+        ApiRegistry.register("openai-completions", "bailian", new BailianProvider());
     }
 }

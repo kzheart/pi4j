@@ -126,6 +126,82 @@ class OpenAICompletionsProviderTest {
     }
 
     @Test
+    void buildRequestIncludesJsonSchemaResponseFormat() {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Model model = new Model(
+                "qwen3.5-plus",
+                "Qwen 3.5 Plus",
+                "openai-completions",
+                "bailian",
+                "https://dashscope.aliyuncs.com/compatible-mode",
+                false,
+                Arrays.asList("text"),
+                null,
+                131072,
+                8192,
+                Collections.<String, String>emptyMap());
+
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        JsonObject schema = new JsonObject();
+        schema.addProperty("type", "json_schema");
+        JsonObject jsonSchema = new JsonObject();
+        jsonSchema.addProperty("name", "my_schema");
+        schema.add("json_schema", jsonSchema);
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .responseFormat(schema)
+                .build());
+
+        JsonObject payload = readPayload(request);
+        assertTrue(payload.has("response_format"));
+        assertEquals("json_schema", payload.getAsJsonObject("response_format").get("type").getAsString());
+        assertTrue(payload.getAsJsonObject("response_format").has("json_schema"));
+    }
+
+    @Test
+    void buildRequestFallsBackJsonSchemaToJsonObjectForDeepSeek() {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Model model = new Model(
+                "deepseek-chat",
+                "DeepSeek Chat",
+                "openai-completions",
+                "deepseek",
+                "https://api.deepseek.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                64000,
+                4096,
+                Collections.<String, String>emptyMap());
+
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        JsonObject schema = new JsonObject();
+        schema.addProperty("type", "json_schema");
+        JsonObject jsonSchema = new JsonObject();
+        jsonSchema.addProperty("name", "my_schema");
+        schema.add("json_schema", jsonSchema);
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .responseFormat(schema)
+                .build());
+
+        JsonObject payload = readPayload(request);
+        assertTrue(payload.has("response_format"));
+        assertEquals("json_object", payload.getAsJsonObject("response_format").get("type").getAsString());
+        assertFalse(payload.getAsJsonObject("response_format").has("json_schema"));
+    }
+
+    @Test
     void parseSseParsesTextAndToolCall() throws Exception {
         OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
         Model model = new Model(

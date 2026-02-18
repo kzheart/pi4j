@@ -1,5 +1,6 @@
 package com.pi4j.ai.provider;
 
+import com.google.gson.JsonObject;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -11,7 +12,7 @@ public final class StreamOptions {
     private final String reasoning;
     private final Integer thinkingBudget;
     private final String thinkingEffort;
-    private final String responseFormat;
+    private final JsonObject responseFormat;
     private final String toolChoice;
     private final String cacheRetention;
     private final String sessionId;
@@ -61,7 +62,7 @@ public final class StreamOptions {
         return thinkingEffort;
     }
 
-    public String getResponseFormat() {
+    public JsonObject getResponseFormat() {
         return responseFormat;
     }
 
@@ -92,7 +93,7 @@ public final class StreamOptions {
         private String reasoning;
         private Integer thinkingBudget;
         private String thinkingEffort;
-        private String responseFormat;
+        private JsonObject responseFormat;
         private String toolChoice;
         private String cacheRetention;
         private String sessionId;
@@ -129,8 +130,19 @@ public final class StreamOptions {
             return this;
         }
 
-        public Builder responseFormat(String responseFormat) {
+        public Builder responseFormat(JsonObject responseFormat) {
             this.responseFormat = responseFormat;
+            return this;
+        }
+
+        public Builder responseFormat(String responseFormat) {
+            if (responseFormat == null) {
+                this.responseFormat = null;
+            } else {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("type", responseFormat);
+                this.responseFormat = obj;
+            }
             return this;
         }
 

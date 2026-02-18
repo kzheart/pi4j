@@ -152,19 +152,29 @@ public class OpenAICompletionsProvider implements ApiProvider {
         if (options.getTemperature() != null) {
             payload.addProperty("temperature", options.getTemperature());
         }
-        if (options.getResponseFormat() != null && !options.getResponseFormat().trim().isEmpty()) {
-            JsonObject responseFormat = new JsonObject();
-            responseFormat.addProperty("type", options.getResponseFormat().trim());
-            payload.add("response_format", responseFormat);
+        if (options.getResponseFormat() != null && compat.getResponseFormatLevel() != ProviderCompat.ResponseFormatLevel.NONE) {
+            JsonObject responseFormat = options.getResponseFormat();
+            String formatType = responseFormat.has("type") ? responseFormat.get("type").getAsString() : null;
+            if ("json_schema".equals(formatType) && compat.getResponseFormatLevel() == ProviderCompat.ResponseFormatLevel.JSON_OBJECT_ONLY) {
+                JsonObject fallback = new JsonObject();
+                fallback.addProperty("type", "json_object");
+                payload.add("response_format", fallback);
+            } else {
+                payload.add("response_format", responseFormat);
+            }
         }
         if (options.getThinkingEffort() != null && !options.getThinkingEffort().isEmpty() && compat.isSupportsReasoningEffort()) {
             if ("zai".equals(compat.getThinkingFormat())) {
                 payload.addProperty("reasoning", options.getThinkingEffort());
+            } else if ("bailian".equals(compat.getThinkingFormat())) {
+                payload.addProperty("enable_thinking", true);
             } else {
                 payload.addProperty("reasoning_effort", options.getThinkingEffort());
             }
+        } else if ("bailian".equals(compat.getThinkingFormat())) {
+            payload.addProperty("enable_thinking", false);
         }
-        payload.add("messages", buildMessages(context.getMessages(), compat));
+        payload.add("messages", buildMessages(context.getSystemPrompt(), context.getMessages(), compat));
         if (!context.getTools().isEmpty()) {
             payload.add("tools", buildTools(context.getTools()));
         }
@@ -201,8 +211,14 @@ public class OpenAICompletionsProvider implements ApiProvider {
         return builder.build();
     }
 
-    private JsonArray buildMessages(List<Message> messages, ProviderCompat.OpenAiCompletionsCompat compat) {
+    private JsonArray buildMessages(String systemPrompt, List<Message> messages, ProviderCompat.OpenAiCompletionsCompat compat) {
         JsonArray list = new JsonArray();
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            JsonObject system = new JsonObject();
+            system.addProperty("role", "system");
+            system.addProperty("content", systemPrompt);
+            list.add(system);
+        }
         for (Message message : messages) {
             if (message instanceof UserMessage) {
                 UserMessage user = (UserMessage) message;

@@ -13,6 +13,7 @@ public final class Providers {
     public static final String DEEPSEEK = "deepseek";
     public static final String CEREBRAS = "cerebras";
     public static final String ZAI = "zai";
+    public static final String BAILIAN = "bailian";
 
     private Providers() {
     }

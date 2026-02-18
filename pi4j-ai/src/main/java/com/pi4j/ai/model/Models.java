@@ -59,6 +59,19 @@ public final class Models {
             8192,
             Collections.<String, String>emptyMap());
 
+    public static final Model QWEN_3_5_PLUS = new Model(
+            "qwen3.5-plus",
+            "Qwen 3.5 Plus",
+            ApiTypes.OPENAI_COMPLETIONS,
+            Providers.BAILIAN,
+            "https://dashscope.aliyuncs.com/compatible-mode",
+            false,
+            Arrays.asList("text"),
+            null,
+            131072,
+            8192,
+            Collections.<String, String>emptyMap());
+
     public static final Model DEEPSEEK_CLAUDE_COMPAT = new Model(
             "deepseek-chat",
             "DeepSeek Chat (Anthropic Compat)",

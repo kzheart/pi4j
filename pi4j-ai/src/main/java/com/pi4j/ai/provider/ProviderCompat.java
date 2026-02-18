@@ -18,9 +18,19 @@ public final class ProviderCompat {
         boolean isDeepSeek = "deepseek".equals(provider) || baseUrl.contains("deepseek.com");
         boolean isChutes = baseUrl.contains("chutes.ai");
         boolean isOpenCode = "opencode".equals(provider) || baseUrl.contains("opencode.ai");
+        boolean isBailian = "bailian".equals(provider) || baseUrl.contains("dashscope.aliyuncs.com");
 
-        boolean isNonStandard = isMistral || isGrok || isCerebras || isDeepSeek || isZai || isChutes || isOpenCode;
-        String maxTokensField = (isMistral || isChutes) ? "max_tokens" : "max_completion_tokens";
+        boolean isNonStandard = isMistral || isGrok || isCerebras || isDeepSeek || isZai || isChutes || isOpenCode || isBailian;
+        String maxTokensField = (isMistral || isChutes || isBailian) ? "max_tokens" : "max_completion_tokens";
+
+        ResponseFormatLevel responseFormatLevel;
+        if (isDeepSeek || isCerebras || isChutes || isZai) {
+            responseFormatLevel = ResponseFormatLevel.JSON_OBJECT_ONLY;
+        } else if (isOllama(provider, baseUrl)) {
+            responseFormatLevel = ResponseFormatLevel.NONE;
+        } else {
+            responseFormatLevel = ResponseFormatLevel.FULL;
+        }
 
         return new OpenAiCompletionsCompat(
                 !isNonStandard,
@@ -30,7 +40,8 @@ public final class ProviderCompat {
                 isMistral,
                 isMistral,
                 isMistral,
-                isZai ? "zai" : "openai");
+                isZai ? "zai" : isBailian ? "bailian" : "openai",
+                responseFormatLevel);
     }
 
     public static boolean isOpenAiCompatible(String provider) {
@@ -43,11 +54,22 @@ public final class ProviderCompat {
                 || "ollama".equals(normalized)
                 || "deepseek".equals(normalized)
                 || "cerebras".equals(normalized)
-                || "zai".equals(normalized);
+                || "zai".equals(normalized)
+                || "bailian".equals(normalized);
+    }
+
+    private static boolean isOllama(String provider, String baseUrl) {
+        return "ollama".equals(provider) || baseUrl.contains("localhost:11434") || baseUrl.contains("127.0.0.1:11434");
     }
 
     private static String safeLower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
+    }
+
+    public enum ResponseFormatLevel {
+        FULL,
+        JSON_OBJECT_ONLY,
+        NONE
     }
 
     public static final class OpenAiCompletionsCompat {
@@ -59,6 +81,7 @@ public final class ProviderCompat {
         private final boolean requiresThinkingAsText;
         private final boolean requiresMistralToolIds;
         private final String thinkingFormat;
+        private final ResponseFormatLevel responseFormatLevel;
 
         public OpenAiCompletionsCompat(
                 boolean supportsStore,
@@ -68,7 +91,8 @@ public final class ProviderCompat {
                 boolean requiresToolResultName,
                 boolean requiresThinkingAsText,
                 boolean requiresMistralToolIds,
-                String thinkingFormat) {
+                String thinkingFormat,
+                ResponseFormatLevel responseFormatLevel) {
             this.supportsStore = supportsStore;
             this.supportsDeveloperRole = supportsDeveloperRole;
             this.supportsReasoningEffort = supportsReasoningEffort;
@@ -77,6 +101,7 @@ public final class ProviderCompat {
             this.requiresThinkingAsText = requiresThinkingAsText;
             this.requiresMistralToolIds = requiresMistralToolIds;
             this.thinkingFormat = thinkingFormat;
+            this.responseFormatLevel = responseFormatLevel;
         }
 
         public boolean isSupportsStore() {
@@ -109,6 +134,10 @@ public final class ProviderCompat {
 
         public String getThinkingFormat() {
             return thinkingFormat;
+        }
+
+        public ResponseFormatLevel getResponseFormatLevel() {
+            return responseFormatLevel;
         }
     }
 }
