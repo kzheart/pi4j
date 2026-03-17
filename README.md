@@ -3,6 +3,8 @@
 > A lightweight, composable AI Agent framework built on Java 8.
 > Inspired by [pi-mono](https://github.com/badlogic/pi-mono)'s minimalist philosophy — toolkit, not framework.
 
+English | [中文](README_CN.md)
+
 [![Java](https://img.shields.io/badge/Java-8%2B-orange)](https://openjdk.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.8--SNAPSHOT-green)]()
@@ -331,6 +333,19 @@ See [`pi4j-examples`](pi4j-examples/) for complete working examples:
 | [BuiltinToolsExample](pi4j-examples/src/main/java/com/pi4j/examples/BuiltinToolsExample.java) | Mount built-in developer tools |
 | [EventListenerExample](pi4j-examples/src/main/java/com/pi4j/examples/EventListenerExample.java) | Subscribe to execution events |
 | [SessionManagerExample](pi4j-examples/src/main/java/com/pi4j/examples/SessionManagerExample.java) | Session persistence and loading |
+
+## Documentation
+
+- [English Documentation](docs/en/)
+  - [Getting Started](docs/en/getting-started.md)
+  - [Architecture & Design](docs/en/architecture.md)
+  - [Tool System](docs/en/tool-system.md)
+  - [LLM Providers](docs/en/providers.md)
+- [中文文档](docs/zh/)
+  - [快速开始](docs/zh/getting-started.md)
+  - [架构与设计](docs/zh/architecture.md)
+  - [工具系统](docs/zh/tool-system.md)
+  - [LLM 提供商](docs/zh/providers.md)
 
 ## License
 
