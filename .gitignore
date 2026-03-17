@@ -7,7 +7,8 @@ out/
 
 # AI workflow artifacts
 plan/
-issues/*.csv
+issues/
+project-guide.html
 
 # local secrets
 .env
