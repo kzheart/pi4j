@@ -1,6 +1,8 @@
 package com.pi4j.agent.tool;
 
+import com.pi4j.ai.provider.AbortHandle;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,6 +36,53 @@ public final class DefaultMiddlewares {
             public AgentToolResult handle(ToolExecutionContext context, ToolExecutionChain chain) throws Exception {
                 if (!confirmation.confirm(context)) {
                     throw new IllegalStateException("Tool confirmation rejected: " + context.getToolName());
+                }
+                return chain.proceed(context);
+            }
+        };
+    }
+
+    /**
+     * 异步确认中间件：不需要确认的调用直接放行；需要确认的调用等待 gate 的决定。
+     * 拒绝/超时/中止一律收敛为错误工具结果（isError=true），不中断循环。
+     * timeoutMillis <= 0 表示无限等待（仅由 abort 解除）。
+     */
+    public static ToolMiddleware confirmation(final ConfirmationGate gate, final long timeoutMillis) {
+        return new ToolMiddleware() {
+            @Override
+            public AgentToolResult handle(ToolExecutionContext context, ToolExecutionChain chain) throws Exception {
+                if (!context.isConfirmationRequired()) {
+                    return chain.proceed(context);
+                }
+                final CompletableFuture<ConfirmationGate.Decision> decisionFuture = gate.requestConfirmation(context);
+                AbortHandle abortHandle = context.getAbortHandle();
+                Runnable denyOnAbort = new Runnable() {
+                    @Override
+                    public void run() {
+                        decisionFuture.complete(ConfirmationGate.Decision.DENIED);
+                    }
+                };
+                if (abortHandle != null) {
+                    abortHandle.addListener(denyOnAbort);
+                    if (abortHandle.isAborted()) {
+                        decisionFuture.complete(ConfirmationGate.Decision.DENIED);
+                    }
+                }
+                ConfirmationGate.Decision decision;
+                try {
+                    decision = timeoutMillis > 0L
+                            ? decisionFuture.get(timeoutMillis, TimeUnit.MILLISECONDS)
+                            : decisionFuture.get();
+                } catch (TimeoutException timeoutException) {
+                    decisionFuture.complete(ConfirmationGate.Decision.DENIED);
+                    return AgentToolResult.error("Tool confirmation timed out: " + context.getToolName());
+                } finally {
+                    if (abortHandle != null) {
+                        abortHandle.removeListener(denyOnAbort);
+                    }
+                }
+                if (decision != ConfirmationGate.Decision.APPROVED) {
+                    return AgentToolResult.error("Tool execution denied: " + context.getToolName());
                 }
                 return chain.proceed(context);
             }

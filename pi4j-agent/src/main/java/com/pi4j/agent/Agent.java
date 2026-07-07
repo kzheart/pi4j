@@ -643,9 +643,9 @@ public class Agent implements AutoCloseable {
                         toolCall.getName(),
                         result.getContent(),
                         result.getDetails(),
-                        false);
+                        result.isError());
                 results.add(toolResultMessage);
-                fire(new ToolExecutionEndEvent(toolCall.getId(), toolCall.getName(), result, false));
+                fire(new ToolExecutionEndEvent(toolCall.getId(), toolCall.getName(), result, result.isError()));
             } catch (Exception ex) {
                 // 执行期异常同样收敛为一条错误结果，保证「调用—结果」成对，不破坏后续与模型的交互。
                 AgentToolResult result = AgentToolResult.error(ex.getMessage());

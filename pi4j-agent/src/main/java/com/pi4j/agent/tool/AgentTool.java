@@ -18,4 +18,9 @@ public interface AgentTool {
             Map<String, Object> params,
             AbortHandle abortHandle,
             ToolUpdateCallback onUpdate);
+
+    /** 本工具的执行策略；默认全默认值。实现方覆写以声明分发模式、确认要求、超时与重试。 */
+    default ToolExecutionPolicy getExecutionPolicy() {
+        return ToolExecutionPolicy.DEFAULT;
+    }
 }

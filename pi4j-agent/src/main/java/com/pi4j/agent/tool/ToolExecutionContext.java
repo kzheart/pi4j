@@ -112,6 +112,11 @@ public final class ToolExecutionContext {
         return attributes.get(key);
     }
 
+    @SuppressWarnings("unchecked")
+    public <T> T getAttribute(AttributeKey<T> key) {
+        return (T) attributes.get(key.getName());
+    }
+
     public ToolExecutionContext withDispatchMode(ToolDispatchMode value) {
         return new ToolExecutionContext(
                 toolCallId,
@@ -187,5 +192,9 @@ public final class ToolExecutionContext {
                 timeoutMillis,
                 maxRetries,
                 copy);
+    }
+
+    public <T> ToolExecutionContext withAttribute(AttributeKey<T> key, T value) {
+        return withAttribute(key.getName(), value);
     }
 }
