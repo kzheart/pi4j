@@ -50,6 +50,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 /**
@@ -81,6 +85,13 @@ import java.util.function.Consumer;
  * 列表使用并发集合，无需额外加锁。
  */
 public class Agent implements AutoCloseable {
+    /** 空闲看门狗共享调度器：守护线程，进程内所有 Agent 共用。 */
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "pi4j-agent-watchdog");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     // ===== 并发与协作设施 =====
     /** 保护下方可变配置与消息历史的互斥锁；只用于短临界区，不与「跑循环」长时间互斥。 */
     private final Object lock = new Object();
@@ -118,6 +129,8 @@ public class Agent implements AutoCloseable {
     private volatile CompletableFuture<Void> runningFuture;
     /** 当前循环的中止句柄，{@link #abort} 通过它打断正在进行的循环。 */
     private volatile AbortHandle runningAbortHandle;
+    private volatile long lastActivityAt;
+    private volatile boolean idleTimedOut;
 
     // ===== 不可变协作者 =====
     /** 构造时传入的全部配置与可插拔策略（消息转换器、上下文变换器、密钥解析器、队列模式等）。 */
@@ -338,11 +351,28 @@ public class Agent implements AutoCloseable {
         streaming = true;
         error = null;
         errorKind = null;
+        idleTimedOut = false;
+        lastActivityAt = System.currentTimeMillis();
         AbortHandle abortHandle = new AbortHandle();
         runningAbortHandle = abortHandle;
         fireState();
+        final long idleTimeoutMillis = options.getIdleTimeoutMillis();
+        ScheduledFuture<?> watchdogTask = null;
+        if (idleTimeoutMillis > 0) {
+            long period = Math.max(100L, Math.min(1000L, idleTimeoutMillis / 4));
+            watchdogTask = WATCHDOG.scheduleAtFixedRate(() -> {
+                if (System.currentTimeMillis() - lastActivityAt >= idleTimeoutMillis) {
+                    idleTimedOut = true;
+                    abortHandle.abort();
+                }
+            }, period, period, TimeUnit.MILLISECONDS);
+        }
+        final ScheduledFuture<?> finalWatchdogTask = watchdogTask;
         CompletableFuture<Void> future = CompletableFuture.runAsync(() -> executeLoop(abortHandle), executor);
         runningFuture = future.whenComplete((unused, throwable) -> {
+            if (finalWatchdogTask != null) {
+                finalWatchdogTask.cancel(false);
+            }
             streaming = false;
             runningAbortHandle = null;
             fireState();
@@ -367,6 +397,7 @@ public class Agent implements AutoCloseable {
      */
     private void executeLoop(AbortHandle abortHandle) {
         fire(new AgentStartEvent());
+        int turnIndex = 0;
 
         try {
             // 循环开始前先吸纳一批已排队的转向消息，作为本轮的起始输入。
@@ -391,7 +422,7 @@ public class Agent implements AutoCloseable {
                     List<AgentMessage> transformed = options.getTransformContext().transform(copyMessages(), abortHandle);
                     List<Message> llmMessages = options.getConvertToLlm().convert(transformed);
                     Context context = new Context(systemPrompt, llmMessages, toToolDefs());
-                    fire(new TurnStartEvent(context));
+                    fire(new TurnStartEvent(context, turnIndex));
                     String apiKey = options.getGetApiKey().resolve(model.getProvider());
 
                     // 汇集本回合的全部流式参数（密钥、推理强度、采样温度、上限、缓存策略、中止句柄等）。
@@ -442,7 +473,8 @@ public class Agent implements AutoCloseable {
                         }
                     }
 
-                    fire(new TurnEndEvent(assistant, toolResults));
+                    fire(new TurnEndEvent(assistant, toolResults, turnIndex));
+                    turnIndex++;
 
                     // 决定下一回合的起始输入：工具执行途中若有转向消息则优先消费，否则再瞧一眼转向队列。
                     if (!steeringAfterTools.isEmpty()) {
@@ -464,11 +496,31 @@ public class Agent implements AutoCloseable {
             fire(new AgentEndEvent(copyMessages()));
         } catch (Exception ex) {
             // 把异常（含中止）转化为一条「失败的助手消息」，让对话历史与事件流保持完整、可观测。
-            StopReason stopReason = abortHandle.isAborted() ? StopReason.ABORTED : StopReason.ERROR;
             Throwable cause = ex;
             while ((cause instanceof ExecutionException || cause instanceof CompletionException)
                     && cause.getCause() != null) {
                 cause = cause.getCause();
+            }
+            if (idleTimedOut) {
+                cause = new TimeoutException("idle timeout: no progress within " + options.getIdleTimeoutMillis() + "ms");
+            }
+            ErrorKind resolvedKind;
+            if (idleTimedOut) {
+                resolvedKind = ErrorKind.TIMEOUT;
+            } else if (abortHandle.isAborted()) {
+                resolvedKind = ErrorKind.ABORTED;
+            } else if (cause instanceof ProviderException) {
+                resolvedKind = ((ProviderException) cause).getKind();
+            } else {
+                resolvedKind = ErrorKind.UNKNOWN;
+            }
+            StopReason stopReason;
+            if (idleTimedOut) {
+                stopReason = StopReason.ERROR;
+            } else if (abortHandle.isAborted()) {
+                stopReason = StopReason.ABORTED;
+            } else {
+                stopReason = StopReason.ERROR;
             }
             String errorMessage = cause.getMessage() == null ? cause.toString() : cause.getMessage();
             AssistantMessage failure = new AssistantMessage(
@@ -483,18 +535,18 @@ public class Agent implements AutoCloseable {
             fire(new MessageStartEvent(failureMessage));
             appendMessageInternal(failureMessage);
             fire(new MessageEndEvent(failureMessage));
-            fire(new TurnEndEvent(failure, Collections.<ToolResultMessage>emptyList()));
-            fire(new AgentEndEvent(copyMessages()));
+            fire(new TurnEndEvent(failure, Collections.<ToolResultMessage>emptyList(), turnIndex));
+            fire(new AgentEndEvent(copyMessages(), errorMessage, resolvedKind));
 
             error = errorMessage;
-            if (abortHandle.isAborted()) {
-                errorKind = ErrorKind.ABORTED;
-            } else if (cause instanceof ProviderException) {
-                errorKind = ((ProviderException) cause).getKind();
-            } else {
-                errorKind = ErrorKind.UNKNOWN;
-            }
+            errorKind = resolvedKind;
             fireState();
+
+            // 让 prompt()/continueExecution() 返回的 future 异常完成，消费方无需轮询 state.error
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new CompletionException(cause);
         } finally {
             // 无论结局如何都清理瞬态：流式占位清空、执行中工具集合清空，并广播最终状态。
             streamMessage = null;
@@ -717,6 +769,7 @@ public class Agent implements AutoCloseable {
 
     /** 向所有事件监听器广播一个事件。 */
     private void fire(AgentEvent event) {
+        lastActivityAt = System.currentTimeMillis();
         for (AgentEventListener listener : listeners) {
             listener.onEvent(event);
         }

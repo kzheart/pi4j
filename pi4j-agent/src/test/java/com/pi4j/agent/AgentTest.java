@@ -2,10 +2,13 @@ package com.pi4j.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.pi4j.agent.event.AgentEndEvent;
 import com.pi4j.agent.event.AgentEvent;
 import com.pi4j.agent.event.MessageUpdateEvent;
 import com.pi4j.agent.event.ToolExecutionEndEvent;
@@ -44,6 +47,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -519,7 +525,9 @@ class AgentTest {
                 .getApiKey(provider -> "test-key")
                 .build());
 
-        agent.prompt("hello").get();
+        ExecutionException thrown = assertThrows(ExecutionException.class, () -> agent.prompt("hello").get());
+        assertTrue(thrown.getCause() instanceof IllegalStateException);
+        assertTrue(thrown.getCause().getMessage().contains("boom"));
 
         AssistantMessage last = lastAssistantMessage(agent.getState().getMessages());
         assertEquals(StopReason.ERROR, last.getStopReason());
@@ -534,7 +542,8 @@ class AgentTest {
                 .getApiKey(provider -> "test-key")
                 .build());
 
-        agent.prompt("hello").get();
+        ExecutionException thrown = assertThrows(ExecutionException.class, () -> agent.prompt("hello").get());
+        assertTrue(thrown.getCause() instanceof ProviderException);
 
         AgentState state = agent.getState();
         assertTrue(state.getError().contains("test rate limited"));
@@ -591,10 +600,70 @@ class AgentTest {
         java.util.concurrent.CompletableFuture<Void> future = agent.prompt("hello");
         Thread.sleep(30L);
         agent.abort();
-        future.get();
+        ExecutionException thrown = assertThrows(ExecutionException.class, future::get);
+        assertTrue(thrown.getCause() instanceof com.pi4j.ai.provider.AbortException);
 
         AssistantMessage last = lastAssistantMessage(agent.getState().getMessages());
         assertEquals(StopReason.ABORTED, last.getStopReason());
+    }
+
+    @Test
+    void idleTimeoutAbortsStalledLoopWithTimeout() throws Exception {
+        ApiRegistry.register(new StalledProvider());
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .idleTimeoutMillis(300L)
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        ExecutionException thrown = assertThrows(ExecutionException.class,
+                () -> agent.prompt("hello").get(5, TimeUnit.SECONDS));
+        assertTrue(thrown.getCause() instanceof TimeoutException);
+        assertTrue(thrown.getCause().getMessage().contains("idle timeout"));
+        assertEquals(ErrorKind.TIMEOUT, agent.getState().getErrorKind());
+    }
+
+    @Test
+    void agentEndEventCarriesErrorOnFailure() throws Exception {
+        ApiRegistry.register(new FailingProvider());
+        List<AgentEndEvent> endEvents = new CopyOnWriteArrayList<AgentEndEvent>();
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+        agent.subscribe(event -> {
+            if (event instanceof AgentEndEvent) {
+                endEvents.add((AgentEndEvent) event);
+            }
+        });
+
+        assertThrows(ExecutionException.class, () -> agent.prompt("hello").get());
+
+        assertEquals(1, endEvents.size());
+        AgentEndEvent failureEnd = endEvents.get(0);
+        assertTrue(failureEnd.getError().contains("boom"));
+        assertEquals(ErrorKind.UNKNOWN, failureEnd.getErrorKind());
+    }
+
+    @Test
+    void agentEndEventHasNoErrorOnSuccess() throws Exception {
+        ApiRegistry.register(new StaticProvider(false));
+        List<AgentEndEvent> endEvents = new CopyOnWriteArrayList<AgentEndEvent>();
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+        agent.subscribe(event -> {
+            if (event instanceof AgentEndEvent) {
+                endEvents.add((AgentEndEvent) event);
+            }
+        });
+
+        agent.prompt("hello").get();
+
+        assertEquals(1, endEvents.size());
+        assertNull(endEvents.get(0).getError());
+        assertNull(endEvents.get(0).getErrorKind());
     }
 
     private Model buildModel() {
@@ -848,6 +917,30 @@ class AgentTest {
         public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
             AssistantMessageEventStream stream = new AssistantMessageEventStream();
             stream.error(new ProviderException(ErrorKind.RATE_LIMITED, 429, "{}", "test rate limited"));
+            return stream;
+        }
+    }
+
+    private static final class StalledProvider implements ApiProvider {
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            AssistantMessageEventStream stream = new AssistantMessageEventStream();
+            stream.push(new StartEvent());
+            AbortHandle abortHandle = options.getAbortHandle();
+            while (!abortHandle.isAborted()) {
+                try {
+                    Thread.sleep(5L);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            abortHandle.throwIfAborted();
             return stream;
         }
     }

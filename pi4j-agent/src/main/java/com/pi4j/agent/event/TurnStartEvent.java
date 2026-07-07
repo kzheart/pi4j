@@ -4,10 +4,12 @@ import com.pi4j.ai.types.Context;
 
 public final class TurnStartEvent extends AgentEvent {
     private final Context context;
+    private final int turnIndex;
 
-    public TurnStartEvent(Context context) {
+    public TurnStartEvent(Context context, int turnIndex) {
         super("turn_start");
         this.context = context;
+        this.turnIndex = turnIndex;
     }
 
     /**
@@ -18,5 +20,10 @@ public final class TurnStartEvent extends AgentEvent {
      */
     public Context getContext() {
         return context;
+    }
+
+    /** 本次循环内从 0 递增的回合序号。 */
+    public int getTurnIndex() {
+        return turnIndex;
     }
 }

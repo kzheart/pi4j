@@ -35,6 +35,7 @@ public final class AgentOptions {
     private final String followUpMode;
     private final ToolDispatcher toolDispatcher;
     private final List<ToolMiddleware> toolMiddlewares;
+    private final long idleTimeoutMillis;
 
     private AgentOptions(Builder builder) {
         this.systemPrompt = builder.systemPrompt;
@@ -57,6 +58,7 @@ public final class AgentOptions {
         this.followUpMode = builder.followUpMode;
         this.toolDispatcher = builder.toolDispatcher;
         this.toolMiddlewares = Collections.unmodifiableList(new ArrayList<ToolMiddleware>(builder.toolMiddlewares));
+        this.idleTimeoutMillis = builder.idleTimeoutMillis;
     }
 
     public static Builder builder() {
@@ -143,6 +145,10 @@ public final class AgentOptions {
         return toolMiddlewares;
     }
 
+    public long getIdleTimeoutMillis() {
+        return idleTimeoutMillis;
+    }
+
     public static final class Builder {
         private String systemPrompt;
         private Model model;
@@ -179,6 +185,7 @@ public final class AgentOptions {
         private String followUpMode = "all";
         private ToolDispatcher toolDispatcher = new DefaultToolDispatcher();
         private List<ToolMiddleware> toolMiddlewares = new ArrayList<ToolMiddleware>();
+        private long idleTimeoutMillis;
 
         public Builder systemPrompt(String systemPrompt) {
             this.systemPrompt = systemPrompt;
@@ -295,6 +302,12 @@ public final class AgentOptions {
             } else {
                 this.toolMiddlewares = new ArrayList<ToolMiddleware>(toolMiddlewares);
             }
+            return this;
+        }
+
+        /** 空闲看门狗：连续 idleTimeoutMillis 毫秒没有任何事件（无流式增量、无工具进展）则中止循环并以 TimeoutException 失败；0 表示不启用。 */
+        public Builder idleTimeoutMillis(long idleTimeoutMillis) {
+            this.idleTimeoutMillis = idleTimeoutMillis;
             return this;
         }
 

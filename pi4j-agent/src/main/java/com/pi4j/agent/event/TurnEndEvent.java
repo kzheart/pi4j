@@ -9,11 +9,13 @@ import java.util.List;
 public final class TurnEndEvent extends AgentEvent {
     private final AssistantMessage message;
     private final List<ToolResultMessage> toolResults;
+    private final int turnIndex;
 
-    public TurnEndEvent(AssistantMessage message, List<ToolResultMessage> toolResults) {
+    public TurnEndEvent(AssistantMessage message, List<ToolResultMessage> toolResults, int turnIndex) {
         super("turn_end");
         this.message = message;
         this.toolResults = Collections.unmodifiableList(new ArrayList<ToolResultMessage>(toolResults));
+        this.turnIndex = turnIndex;
     }
 
     public AssistantMessage getMessage() {
@@ -22,5 +24,10 @@ public final class TurnEndEvent extends AgentEvent {
 
     public List<ToolResultMessage> getToolResults() {
         return toolResults;
+    }
+
+    /** 本次循环内从 0 递增的回合序号。 */
+    public int getTurnIndex() {
+        return turnIndex;
     }
 }
