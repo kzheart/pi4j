@@ -29,7 +29,8 @@ public final class AgentToolResult {
     }
 
     public static AgentToolResult error(String errorMessage) {
-        return new AgentToolResult(Collections.<ContentBlock>singletonList(new TextContent(errorMessage)), null);
+        String message = errorMessage == null || errorMessage.trim().isEmpty() ? "Unknown error" : errorMessage;
+        return new AgentToolResult(Collections.<ContentBlock>singletonList(new TextContent(message)), null);
     }
 
     public static AgentToolResult withImage(String text, String base64, String mimeType) {

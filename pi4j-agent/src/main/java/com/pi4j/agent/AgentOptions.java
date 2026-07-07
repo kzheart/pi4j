@@ -159,7 +159,14 @@ public final class AgentOptions {
             return converted;
         };
         private ContextTransformer transformContext = (messages, abortHandle) -> messages;
-        private ApiKeyResolver getApiKey = provider -> System.getenv("DEEPSEEK_API_KEY");
+        // 默认密钥解析：按 provider 名推导环境变量（如 openai → OPENAI_API_KEY）；未设置时返回 null，由 provider 侧报"apiKey is required"。
+        private ApiKeyResolver getApiKey = provider -> {
+            if (provider == null || provider.trim().isEmpty()) {
+                return null;
+            }
+            String env = provider.trim().toUpperCase().replace('-', '_').replace('.', '_') + "_API_KEY";
+            return System.getenv(env);
+        };
         private Double temperature;
         private Integer maxTokens;
         private Integer thinkingBudget;

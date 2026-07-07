@@ -177,7 +177,7 @@ class AgentTest {
     }
 
     @Test
-    void agentLoopRunExecutesRealLoop() throws Exception {
+    void continueExecutionRunsRealLoop() throws Exception {
         ApiRegistry.register(new StaticProvider(false));
 
         Model model = new Model(
@@ -200,10 +200,9 @@ class AgentTest {
 
         agent.appendMessage(new LlmAgentMessage(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hello")))));
 
-        List<AgentMessage> loopMessages = AgentLoop.run(Collections.<AgentMessage>emptyList(), agent, new AbortHandle())
-                .result()
-                .get();
+        agent.continueExecution().get();
 
+        List<AgentMessage> loopMessages = agent.getState().getMessages();
         assertTrue(loopMessages.size() >= 2);
         assertTrue(loopMessages.get(loopMessages.size() - 1) instanceof LlmAgentMessage);
     }
@@ -526,6 +525,45 @@ class AgentTest {
     }
 
     @Test
+    void promptWithUnregisteredToolNameProducesErrorResultAndCompletes() throws Exception {
+        ApiRegistry.register(new UnregisteredToolProvider());
+        Model model = buildModel();
+
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(model)
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.prompt("use phantom tool").get();
+
+        assertFalse(agent.getState().isStreaming());
+        assertEquals(null, agent.getState().getError());
+
+        boolean hasPhantomErrorResult = false;
+        for (AgentMessage message : agent.getState().getMessages()) {
+            if (!(message instanceof LlmAgentMessage)) {
+                continue;
+            }
+            Message llm = ((LlmAgentMessage) message).getMessage();
+            if (!(llm instanceof ToolResultMessage)) {
+                continue;
+            }
+            ToolResultMessage result = (ToolResultMessage) llm;
+            if (!"phantom".equals(result.getToolName())) {
+                continue;
+            }
+            if (!result.isError()) {
+                continue;
+            }
+            if (!result.getContent().isEmpty() && result.getContent().get(0) instanceof TextContent) {
+                hasPhantomErrorResult = "Tool not found: phantom".equals(
+                        ((TextContent) result.getContent().get(0)).getText());
+            }
+        }
+        assertTrue(hasPhantomErrorResult);
+    }
+
+    @Test
     void abortCreatesAssistantAbortedMessage() throws Exception {
         ApiRegistry.register(new BlockingProvider());
         Agent agent = new Agent(AgentOptions.builder()
@@ -698,6 +736,64 @@ class AgentTest {
             TextContent text = new TextContent("done");
             AssistantMessage message = new AssistantMessage(
                     Collections.<ContentBlock>singletonList(text),
+                    getApi(),
+                    model.getProvider(),
+                    model.getId(),
+                    null,
+                    StopReason.STOP,
+                    null);
+            stream.push(new TextStartEvent(0));
+            stream.push(new TextDeltaEvent(0, text.getText(), message));
+            stream.push(new TextEndEvent(0));
+            stream.push(new DoneEvent(StopReason.STOP, message));
+            stream.end(message);
+            return stream;
+        }
+    }
+
+    private static final class UnregisteredToolProvider implements ApiProvider {
+
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            AssistantMessageEventStream stream = new AssistantMessageEventStream();
+            stream.push(new StartEvent());
+
+            boolean hasToolResult = false;
+            for (Message message : context.getMessages()) {
+                if (message instanceof ToolResultMessage) {
+                    hasToolResult = true;
+                    break;
+                }
+            }
+
+            List<ContentBlock> content = new ArrayList<ContentBlock>();
+            if (!hasToolResult) {
+                ToolCallContent toolCall = new ToolCallContent("call_1", "phantom", new java.util.LinkedHashMap<String, Object>());
+                content.add(toolCall);
+                AssistantMessage message = new AssistantMessage(
+                        content,
+                        getApi(),
+                        model.getProvider(),
+                        model.getId(),
+                        null,
+                        StopReason.TOOL_USE,
+                        null);
+                stream.push(new ToolCallStartEvent(0));
+                stream.push(new ToolCallEndEvent(0, toolCall, message));
+                stream.push(new DoneEvent(StopReason.TOOL_USE, message));
+                stream.end(message);
+                return stream;
+            }
+
+            TextContent text = new TextContent("done");
+            content.add(text);
+            AssistantMessage message = new AssistantMessage(
+                    content,
                     getApi(),
                     model.getProvider(),
                     model.getId(),
