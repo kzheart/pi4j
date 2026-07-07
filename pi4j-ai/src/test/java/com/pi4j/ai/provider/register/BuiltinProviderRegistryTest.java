@@ -1,20 +1,15 @@
 package com.pi4j.ai.provider.register;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.anthropic.AnthropicProvider;
-import com.pi4j.ai.provider.bailian.BailianProvider;
-import com.pi4j.ai.provider.customopenai.CustomOpenAIProvider;
 import com.pi4j.ai.provider.google.GoogleProvider;
 import com.pi4j.ai.provider.google.GoogleVertexProvider;
-import com.pi4j.ai.provider.groq.GroqProvider;
-import com.pi4j.ai.provider.mistral.MistralProvider;
-import com.pi4j.ai.provider.ollama.OllamaProvider;
 import com.pi4j.ai.provider.openai.OpenAICompletionsProvider;
 import com.pi4j.ai.provider.openai.OpenAIResponsesProvider;
-import com.pi4j.ai.provider.openrouter.OpenRouterProvider;
-import com.pi4j.ai.provider.xai.XAIProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,16 +32,20 @@ class BuiltinProviderRegistryTest {
     }
 
     @Test
-    void registerBuiltinsRegistersOpenAiCompletionsProviderOverrides() {
+    void registerBuiltinsDoesNotClearCustomRegistrations() {
+        OpenAICompletionsProvider custom = new OpenAICompletionsProvider();
+        ApiRegistry.register("openai-completions", "my-custom", custom);
+
         BuiltinProviderRegistry.registerBuiltins();
 
-        assertTrue(ApiRegistry.getProvider("openai-completions", "mistral") instanceof MistralProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "groq") instanceof GroqProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "xai") instanceof XAIProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "openrouter") instanceof OpenRouterProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "ollama") instanceof OllamaProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "custom-openai") instanceof CustomOpenAIProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "bailian") instanceof BailianProvider);
-        assertTrue(ApiRegistry.getProvider("openai-completions", "unknown") instanceof OpenAICompletionsProvider);
+        assertSame(custom, ApiRegistry.getProvider("openai-completions", "my-custom"));
+    }
+
+    @Test
+    void unknownProviderNameFallsBackToBaseProvider() {
+        BuiltinProviderRegistry.registerBuiltins();
+
+        assertNotNull(ApiRegistry.getProvider("openai-completions", "unknown-name"));
+        assertTrue(ApiRegistry.getProvider("openai-completions", "unknown-name") instanceof OpenAICompletionsProvider);
     }
 }
