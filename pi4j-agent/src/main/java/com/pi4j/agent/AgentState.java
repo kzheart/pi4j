@@ -1,6 +1,7 @@
 package com.pi4j.agent;
 
 import com.pi4j.agent.tool.AgentTool;
+import com.pi4j.ai.provider.ErrorKind;
 import com.pi4j.ai.types.Model;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,6 +19,7 @@ public final class AgentState {
     private final AgentMessage streamMessage;
     private final Set<String> pendingToolCalls;
     private final String error;
+    private final ErrorKind errorKind;
 
     public AgentState(
             String systemPrompt,
@@ -28,7 +30,8 @@ public final class AgentState {
             boolean streaming,
             AgentMessage streamMessage,
             Set<String> pendingToolCalls,
-            String error) {
+            String error,
+            ErrorKind errorKind) {
         this.systemPrompt = systemPrompt;
         this.model = model;
         this.thinkingLevel = thinkingLevel;
@@ -38,6 +41,7 @@ public final class AgentState {
         this.streamMessage = streamMessage;
         this.pendingToolCalls = Collections.unmodifiableSet(new LinkedHashSet<String>(pendingToolCalls));
         this.error = error;
+        this.errorKind = errorKind;
     }
 
     public String getSystemPrompt() {
@@ -74,5 +78,10 @@ public final class AgentState {
 
     public String getError() {
         return error;
+    }
+
+    /** 最近一次失败的错误类别；无错误或无法归类时为 null / UNKNOWN。 */
+    public ErrorKind getErrorKind() {
+        return errorKind;
     }
 }

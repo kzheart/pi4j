@@ -17,6 +17,8 @@ import com.pi4j.agent.tool.ToolUpdateCallback;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiProvider;
 import com.pi4j.ai.provider.ApiRegistry;
+import com.pi4j.ai.provider.ErrorKind;
+import com.pi4j.ai.provider.ProviderException;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
 import com.pi4j.ai.stream.DoneEvent;
@@ -525,6 +527,21 @@ class AgentTest {
     }
 
     @Test
+    void providerFailureExposesErrorKindInState() throws Exception {
+        ApiRegistry.register(new RateLimitedProvider());
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+
+        agent.prompt("hello").get();
+
+        AgentState state = agent.getState();
+        assertTrue(state.getError().contains("test rate limited"));
+        assertEquals(ErrorKind.RATE_LIMITED, state.getErrorKind());
+    }
+
+    @Test
     void promptWithUnregisteredToolNameProducesErrorResultAndCompletes() throws Exception {
         ApiRegistry.register(new UnregisteredToolProvider());
         Model model = buildModel();
@@ -818,6 +835,20 @@ class AgentTest {
         @Override
         public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
             throw new IllegalStateException("boom");
+        }
+    }
+
+    private static final class RateLimitedProvider implements ApiProvider {
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            AssistantMessageEventStream stream = new AssistantMessageEventStream();
+            stream.error(new ProviderException(ErrorKind.RATE_LIMITED, 429, "{}", "test rate limited"));
+            return stream;
         }
     }
 

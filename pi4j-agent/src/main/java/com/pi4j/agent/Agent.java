@@ -18,6 +18,8 @@ import com.pi4j.agent.tool.ToolExecutionContext;
 import com.pi4j.agent.tool.ToolExecutor;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiRegistry;
+import com.pi4j.ai.provider.ErrorKind;
+import com.pi4j.ai.provider.ProviderException;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
 import com.pi4j.ai.types.AssistantMessage;
@@ -42,6 +44,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -110,6 +113,7 @@ public class Agent implements AutoCloseable {
     private volatile AgentMessage streamMessage;
     /** 最近一次循环的错误信息；正常时为 {@code null}。 */
     private volatile String error;
+    private volatile ErrorKind errorKind;
     /** 当前循环的完成凭据，{@link #waitForIdle} 据此等待空闲。 */
     private volatile CompletableFuture<Void> runningFuture;
     /** 当前循环的中止句柄，{@link #abort} 通过它打断正在进行的循环。 */
@@ -144,7 +148,8 @@ public class Agent implements AutoCloseable {
                     streaming,
                     streamMessage,
                     pendingToolCalls,
-                    error);
+                    error,
+                    errorKind);
         }
     }
 
@@ -279,6 +284,7 @@ public class Agent implements AutoCloseable {
             followUpQueue.clear();
             pendingToolCalls.clear();
             error = null;
+            errorKind = null;
             streamMessage = null;
         }
         fireState();
@@ -331,6 +337,7 @@ public class Agent implements AutoCloseable {
     private CompletableFuture<Void> startExecution() {
         streaming = true;
         error = null;
+        errorKind = null;
         AbortHandle abortHandle = new AbortHandle();
         runningAbortHandle = abortHandle;
         fireState();
@@ -458,7 +465,12 @@ public class Agent implements AutoCloseable {
         } catch (Exception ex) {
             // 把异常（含中止）转化为一条「失败的助手消息」，让对话历史与事件流保持完整、可观测。
             StopReason stopReason = abortHandle.isAborted() ? StopReason.ABORTED : StopReason.ERROR;
-            String errorMessage = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+            Throwable cause = ex;
+            while ((cause instanceof ExecutionException || cause instanceof CompletionException)
+                    && cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            String errorMessage = cause.getMessage() == null ? cause.toString() : cause.getMessage();
             AssistantMessage failure = new AssistantMessage(
                     Collections.<ContentBlock>singletonList(new TextContent("")),
                     model.getApi(),
@@ -475,6 +487,13 @@ public class Agent implements AutoCloseable {
             fire(new AgentEndEvent(copyMessages()));
 
             error = errorMessage;
+            if (abortHandle.isAborted()) {
+                errorKind = ErrorKind.ABORTED;
+            } else if (cause instanceof ProviderException) {
+                errorKind = ((ProviderException) cause).getKind();
+            } else {
+                errorKind = ErrorKind.UNKNOWN;
+            }
             fireState();
         } finally {
             // 无论结局如何都清理瞬态：流式占位清空、执行中工具集合清空，并广播最终状态。
