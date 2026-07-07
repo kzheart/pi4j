@@ -49,6 +49,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -88,7 +89,15 @@ public class OpenAIResponsesProvider implements ApiProvider {
             IOException parseError = null;
             for (int attempt = 0; attempt < 2; attempt++) {
                 Request request = buildRequest(model, context, options);
-                try (Response response = client.newCall(request).execute()) {
+                Call call = client.newCall(request);
+                Runnable cancelOnAbort = call::cancel;
+                if (abortHandle != null) {
+                    abortHandle.addListener(cancelOnAbort);
+                    if (abortHandle.isAborted()) {
+                        call.cancel();
+                    }
+                }
+                try (Response response = call.execute()) {
                     if (!response.isSuccessful()) {
                         throw new IllegalStateException(buildHttpErrorMessage("OpenAI responses request failed", response));
                     }
@@ -103,6 +112,10 @@ public class OpenAIResponsesProvider implements ApiProvider {
                         if (attempt == 1 || abortHandle.isAborted()) {
                             throw ioException;
                         }
+                    }
+                } finally {
+                    if (abortHandle != null) {
+                        abortHandle.removeListener(cancelOnAbort);
                     }
                 }
             }

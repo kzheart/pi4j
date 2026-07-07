@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -59,7 +60,15 @@ public class GoogleProvider implements ApiProvider {
         AbortHandle abortHandle = options.getAbortHandle();
         try {
             Request request = buildRequest(model, context, options);
-            try (Response response = client.newCall(request).execute()) {
+            Call call = client.newCall(request);
+            Runnable cancelOnAbort = call::cancel;
+            if (abortHandle != null) {
+                abortHandle.addListener(cancelOnAbort);
+                if (abortHandle.isAborted()) {
+                    call.cancel();
+                }
+            }
+            try (Response response = call.execute()) {
                 if (!response.isSuccessful()) {
                     throw new IllegalStateException("Google request failed: " + response.code());
                 }
@@ -67,6 +76,10 @@ public class GoogleProvider implements ApiProvider {
                     throw new IllegalStateException("Google response body is empty");
                 }
                 parseSse(response.body().charStream(), stream, model, abortHandle);
+            } finally {
+                if (abortHandle != null) {
+                    abortHandle.removeListener(cancelOnAbort);
+                }
             }
         } catch (Exception ex) {
             AssistantMessage errorMessage = new AssistantMessage(
