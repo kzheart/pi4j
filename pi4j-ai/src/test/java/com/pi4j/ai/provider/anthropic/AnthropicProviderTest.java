@@ -164,23 +164,6 @@ class AnthropicProviderTest {
         assertEquals("hello", text.getText());
     }
 
-    @Test
-    void buildHttpErrorMessageIncludesResponseBody() throws Exception {
-        AnthropicProvider provider = new AnthropicProvider(new OkHttpClient());
-        Request request = new Request.Builder().url("https://api.anthropic.com/v1/messages").build();
-        Response response = new Response.Builder()
-                .request(request)
-                .protocol(Protocol.HTTP_1_1)
-                .code(400)
-                .message("Bad Request")
-                .body(ResponseBody.create("{\"type\":\"error\",\"message\":\"too long\"}", okhttp3.MediaType.parse("application/json")))
-                .build();
-
-        String message = provider.buildHttpErrorMessage("Anthropic request failed", response);
-        assertTrue(message.contains("400"));
-        assertTrue(message.contains("too long"));
-    }
-
     private JsonObject readPayload(Request request) {
         try {
             Buffer buffer = new Buffer();

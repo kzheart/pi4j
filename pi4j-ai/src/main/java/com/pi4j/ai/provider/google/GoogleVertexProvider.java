@@ -13,7 +13,7 @@ public class GoogleVertexProvider extends GoogleProvider {
     }
 
     @Override
-    Request buildRequest(Model model, Context context, StreamOptions options) {
+    protected Request buildRequest(Model model, Context context, StreamOptions options) {
         Request baseRequest = super.buildRequest(model, context, options);
         Request.Builder builder = baseRequest.newBuilder();
 

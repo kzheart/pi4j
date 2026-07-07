@@ -1,16 +1,13 @@
 package com.pi4j.ai.provider.google;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.pi4j.ai.provider.AbortHandle;
-import com.pi4j.ai.provider.ApiProvider;
+import com.pi4j.ai.provider.AbstractHttpSseProvider;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
 import com.pi4j.ai.stream.DoneEvent;
-import com.pi4j.ai.stream.ErrorEvent;
 import com.pi4j.ai.stream.StartEvent;
 import com.pi4j.ai.types.AssistantMessage;
-import com.pi4j.ai.types.ContentBlock;
 import com.pi4j.ai.types.Context;
 import com.pi4j.ai.types.Model;
 import com.pi4j.ai.types.StopReason;
@@ -18,30 +15,23 @@ import com.pi4j.ai.util.JsonUtil;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
-import okhttp3.Response;
 
-public class GoogleProvider implements ApiProvider {
+public class GoogleProvider extends AbstractHttpSseProvider {
     private static final MediaType JSON_MEDIA_TYPE = MediaType.parse("application/json");
     private static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
-
-    private final OkHttpClient client;
 
     public GoogleProvider() {
         this(new OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build());
     }
 
     public GoogleProvider(OkHttpClient client) {
-        this.client = Objects.requireNonNull(client, "client");
+        super(client);
     }
 
     @Override
@@ -50,52 +40,7 @@ public class GoogleProvider implements ApiProvider {
     }
 
     @Override
-    public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
-        AssistantMessageEventStream stream = new AssistantMessageEventStream();
-        CompletableFuture.runAsync(() -> invokeStream(stream, model, context, options));
-        return stream;
-    }
-
-    private void invokeStream(AssistantMessageEventStream stream, Model model, Context context, StreamOptions options) {
-        AbortHandle abortHandle = options.getAbortHandle();
-        try {
-            Request request = buildRequest(model, context, options);
-            Call call = client.newCall(request);
-            Runnable cancelOnAbort = call::cancel;
-            if (abortHandle != null) {
-                abortHandle.addListener(cancelOnAbort);
-                if (abortHandle.isAborted()) {
-                    call.cancel();
-                }
-            }
-            try (Response response = call.execute()) {
-                if (!response.isSuccessful()) {
-                    throw new IllegalStateException("Google request failed: " + response.code());
-                }
-                if (response.body() == null) {
-                    throw new IllegalStateException("Google response body is empty");
-                }
-                parseSse(response.body().charStream(), stream, model, abortHandle);
-            } finally {
-                if (abortHandle != null) {
-                    abortHandle.removeListener(cancelOnAbort);
-                }
-            }
-        } catch (Exception ex) {
-            AssistantMessage errorMessage = new AssistantMessage(
-                    Collections.<ContentBlock>emptyList(),
-                    getApi(),
-                    model.getProvider(),
-                    model.getId(),
-                    null,
-                    abortHandle.isAborted() ? StopReason.ABORTED : StopReason.ERROR,
-                    ex.getMessage());
-            stream.push(new ErrorEvent(errorMessage.getStopReason(), errorMessage));
-            stream.error(ex);
-        }
-    }
-
-    Request buildRequest(Model model, Context context, StreamOptions options) {
+    protected Request buildRequest(Model model, Context context, StreamOptions options) {
         String apiKey = options.getApiKey();
         if (apiKey == null || apiKey.trim().isEmpty()) {
             throw new IllegalArgumentException("apiKey is required");
@@ -139,7 +84,8 @@ public class GoogleProvider implements ApiProvider {
         return builder.build();
     }
 
-    void parseSse(Reader reader, AssistantMessageEventStream stream, Model model, AbortHandle abortHandle) throws IOException {
+    @Override
+    protected void parseSse(Reader reader, AssistantMessageEventStream stream, Model model, AbortHandle abortHandle) throws IOException {
         GoogleShared.ParseState state = new GoogleShared.ParseState();
         stream.push(new StartEvent());
 

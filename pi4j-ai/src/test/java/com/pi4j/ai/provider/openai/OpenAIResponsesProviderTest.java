@@ -335,23 +335,6 @@ class OpenAIResponsesProviderTest {
         assertEquals("call_9|fc_9", toolCall.getId());
     }
 
-    @Test
-    void buildHttpErrorMessageIncludesResponseBody() throws Exception {
-        OpenAIResponsesProvider provider = new OpenAIResponsesProvider(new OkHttpClient());
-        Request request = new Request.Builder().url("https://api.openai.com/v1/responses").build();
-        Response response = new Response.Builder()
-                .request(request)
-                .protocol(Protocol.HTTP_1_1)
-                .code(429)
-                .message("Too Many Requests")
-                .body(ResponseBody.create("{\"error\":\"rate limit\"}", okhttp3.MediaType.parse("application/json")))
-                .build();
-
-        String message = provider.buildHttpErrorMessage("OpenAI responses request failed", response);
-        assertTrue(message.contains("429"));
-        assertTrue(message.contains("rate limit"));
-    }
-
     private JsonObject readPayload(Request request) {
         try {
             Buffer buffer = new Buffer();

@@ -1,14 +1,12 @@
 package com.pi4j.ai.provider.openai;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.pi4j.ai.provider.AbortHandle;
-import com.pi4j.ai.provider.ApiProvider;
+import com.pi4j.ai.provider.AbstractHttpSseProvider;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
 import com.pi4j.ai.stream.DoneEvent;
-import com.pi4j.ai.stream.ErrorEvent;
 import com.pi4j.ai.stream.StartEvent;
 import com.pi4j.ai.stream.TextDeltaEvent;
 import com.pi4j.ai.stream.TextEndEvent;
@@ -39,36 +37,29 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
-import okhttp3.Response;
 
-public class OpenAIResponsesProvider implements ApiProvider {
+public class OpenAIResponsesProvider extends AbstractHttpSseProvider {
     private static final MediaType JSON_MEDIA_TYPE = MediaType.parse("application/json");
     private static final String DEFAULT_BASE_URL = "https://api.openai.com";
     private static final String API_PATH = "/v1/responses";
-
-    private final OkHttpClient client;
 
     public OpenAIResponsesProvider() {
         this(new OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build());
     }
 
     public OpenAIResponsesProvider(OkHttpClient client) {
-        this.client = Objects.requireNonNull(client, "client");
+        super(client);
     }
 
     @Override
@@ -77,77 +68,7 @@ public class OpenAIResponsesProvider implements ApiProvider {
     }
 
     @Override
-    public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
-        AssistantMessageEventStream stream = new AssistantMessageEventStream();
-        CompletableFuture.runAsync(() -> invokeStream(stream, model, context, options));
-        return stream;
-    }
-
-    private void invokeStream(AssistantMessageEventStream stream, Model model, Context context, StreamOptions options) {
-        AbortHandle abortHandle = options.getAbortHandle();
-        try {
-            IOException parseError = null;
-            for (int attempt = 0; attempt < 2; attempt++) {
-                Request request = buildRequest(model, context, options);
-                Call call = client.newCall(request);
-                Runnable cancelOnAbort = call::cancel;
-                if (abortHandle != null) {
-                    abortHandle.addListener(cancelOnAbort);
-                    if (abortHandle.isAborted()) {
-                        call.cancel();
-                    }
-                }
-                try (Response response = call.execute()) {
-                    if (!response.isSuccessful()) {
-                        throw new IllegalStateException(buildHttpErrorMessage("OpenAI responses request failed", response));
-                    }
-                    if (response.body() == null) {
-                        throw new IllegalStateException("OpenAI responses body is empty");
-                    }
-                    try {
-                        parseSse(response.body().charStream(), stream, model, abortHandle);
-                        return;
-                    } catch (IOException ioException) {
-                        parseError = ioException;
-                        if (attempt == 1 || abortHandle.isAborted()) {
-                            throw ioException;
-                        }
-                    }
-                } finally {
-                    if (abortHandle != null) {
-                        abortHandle.removeListener(cancelOnAbort);
-                    }
-                }
-            }
-            if (parseError != null) {
-                throw parseError;
-            }
-        } catch (Exception ex) {
-            AssistantMessage errorMessage = new AssistantMessage(
-                    Collections.<ContentBlock>emptyList(),
-                    getApi(),
-                    model.getProvider(),
-                    model.getId(),
-                    null,
-                    abortHandle.isAborted() ? StopReason.ABORTED : StopReason.ERROR,
-                    ex.getMessage());
-            stream.push(new ErrorEvent(errorMessage.getStopReason(), errorMessage));
-            stream.error(ex);
-        }
-    }
-
-    String buildHttpErrorMessage(String prefix, Response response) throws IOException {
-        String body = response.body() == null ? "" : response.body().string();
-        if (body.length() > 512) {
-            body = body.substring(0, 512);
-        }
-        if (body.isEmpty()) {
-            body = "(no body)";
-        }
-        return prefix + ": " + response.code() + " " + body;
-    }
-
-    Request buildRequest(Model model, Context context, StreamOptions options) {
+    protected Request buildRequest(Model model, Context context, StreamOptions options) {
         String apiKey = options.getApiKey();
         if (apiKey == null || apiKey.trim().isEmpty()) {
             throw new IllegalArgumentException("apiKey is required");
@@ -324,7 +245,8 @@ public class OpenAIResponsesProvider implements ApiProvider {
         return list;
     }
 
-    void parseSse(Reader reader, AssistantMessageEventStream stream, Model model, AbortHandle abortHandle) throws IOException {
+    @Override
+    protected void parseSse(Reader reader, AssistantMessageEventStream stream, Model model, AbortHandle abortHandle) throws IOException {
         BufferedReader buffered = new BufferedReader(reader);
         String line;
         StringBuilder data = new StringBuilder();
