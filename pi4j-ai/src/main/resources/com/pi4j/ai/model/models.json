@@ -1,0 +1,88 @@
+[
+  {
+    "id": "claude-sonnet-4-5-20250929",
+    "name": "Claude Sonnet 4.5",
+    "api": "anthropic-messages",
+    "provider": "anthropic",
+    "baseUrl": "https://api.anthropic.com",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "contextWindow": 200000,
+    "maxTokens": 8192,
+    "headers": {},
+    "aliases": ["claude-sonnet-4-5"]
+  },
+  {
+    "id": "gpt-4.1",
+    "name": "GPT-4.1",
+    "api": "openai-responses",
+    "provider": "openai",
+    "baseUrl": "https://api.openai.com",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "contextWindow": 128000,
+    "maxTokens": 8192,
+    "headers": {}
+  },
+  {
+    "id": "gpt-4.1-mini",
+    "name": "GPT-4.1 Mini",
+    "api": "openai-responses",
+    "provider": "openai",
+    "baseUrl": "https://api.openai.com",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "contextWindow": 128000,
+    "maxTokens": 8192,
+    "headers": {}
+  },
+  {
+    "id": "gemini-2.5-flash",
+    "name": "Gemini 2.5 Flash",
+    "api": "google-generative-ai",
+    "provider": "google",
+    "baseUrl": "https://generativelanguage.googleapis.com",
+    "reasoning": true,
+    "input": ["text", "image"],
+    "contextWindow": 1048576,
+    "maxTokens": 8192,
+    "headers": {}
+  },
+  {
+    "id": "qwen3.5-plus",
+    "name": "Qwen 3.5 Plus",
+    "api": "openai-completions",
+    "provider": "bailian",
+    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode",
+    "reasoning": false,
+    "input": ["text"],
+    "contextWindow": 131072,
+    "maxTokens": 8192,
+    "headers": {}
+  },
+  {
+    "id": "deepseek-chat",
+    "name": "DeepSeek Chat (OpenAI Compat)",
+    "api": "openai-completions",
+    "provider": "deepseek",
+    "baseUrl": "https://api.deepseek.com",
+    "reasoning": false,
+    "input": ["text"],
+    "contextWindow": 65536,
+    "maxTokens": 4096,
+    "headers": {}
+  },
+  {
+    "id": "MiniMax-M2.5",
+    "name": "MiniMax M2.5 (Anthropic Compat)",
+    "api": "anthropic-messages",
+    "provider": "minimax",
+    "baseUrl": "https://api.minimaxi.com/anthropic",
+    "reasoning": false,
+    "input": ["text"],
+    "contextWindow": 205000,
+    "maxTokens": 16384,
+    "headers": {},
+    "aliases": ["minimax-m2.5"]
+  }
+]

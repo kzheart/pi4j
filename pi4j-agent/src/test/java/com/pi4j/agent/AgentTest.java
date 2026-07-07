@@ -13,6 +13,7 @@ import com.pi4j.agent.event.AgentEvent;
 import com.pi4j.agent.event.MessageUpdateEvent;
 import com.pi4j.agent.event.ToolExecutionEndEvent;
 import com.pi4j.agent.event.ToolExecutionStartEvent;
+import com.pi4j.agent.event.TurnStartEvent;
 import com.pi4j.agent.tool.AgentTool;
 import com.pi4j.agent.tool.AgentToolResult;
 import com.pi4j.agent.tool.ToolSpec;
@@ -50,6 +51,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -646,6 +648,36 @@ class AgentTest {
     }
 
     @Test
+    void errorAssistantMessagesAreExcludedFromLlmContext() throws Exception {
+        ApiRegistry.register(new FailOnceThenSucceedProvider());
+        List<TurnStartEvent> turnStarts = new CopyOnWriteArrayList<TurnStartEvent>();
+        Agent agent = new Agent(AgentOptions.builder()
+                .model(buildModel())
+                .getApiKey(provider -> "test-key")
+                .build());
+        agent.subscribe(event -> {
+            if (event instanceof TurnStartEvent) {
+                turnStarts.add((TurnStartEvent) event);
+            }
+        });
+
+        assertThrows(ExecutionException.class, () -> agent.prompt("first").get());
+        assertEquals(1, turnStarts.size());
+
+        agent.prompt("second").get();
+        assertEquals(2, turnStarts.size());
+
+        Context secondTurnContext = turnStarts.get(1).getContext();
+        for (Message message : secondTurnContext.getMessages()) {
+            if (message instanceof AssistantMessage) {
+                assertFalse(
+                        ((AssistantMessage) message).getStopReason() == StopReason.ERROR,
+                        "ERROR assistant messages must not be sent to the LLM");
+            }
+        }
+    }
+
+    @Test
     void agentEndEventHasNoErrorOnSuccess() throws Exception {
         ApiRegistry.register(new StaticProvider(false));
         List<AgentEndEvent> endEvents = new CopyOnWriteArrayList<AgentEndEvent>();
@@ -892,6 +924,23 @@ class AgentTest {
             stream.push(new DoneEvent(StopReason.STOP, message));
             stream.end(message);
             return stream;
+        }
+    }
+
+    private static final class FailOnceThenSucceedProvider implements ApiProvider {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public String getApi() {
+            return "openai-completions";
+        }
+
+        @Override
+        public AssistantMessageEventStream stream(Model model, Context context, StreamOptions options) {
+            if (calls.getAndIncrement() == 0) {
+                throw new IllegalStateException("boom");
+            }
+            return new StaticProvider(false).stream(model, context, options);
         }
     }
 

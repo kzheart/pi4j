@@ -19,6 +19,7 @@ import com.pi4j.agent.tool.ToolExecutor;
 import com.pi4j.ai.provider.AbortHandle;
 import com.pi4j.ai.provider.ApiRegistry;
 import com.pi4j.ai.provider.ErrorKind;
+import com.pi4j.ai.provider.MessageTransformer;
 import com.pi4j.ai.provider.ProviderException;
 import com.pi4j.ai.provider.StreamOptions;
 import com.pi4j.ai.stream.AssistantMessageEventStream;
@@ -420,7 +421,8 @@ public class Agent implements AutoCloseable {
 
                     // 组装发送给 LLM 的上下文：先经上下文变换器（可裁剪/压缩历史），再转换成 LLM 原生消息格式。
                     List<AgentMessage> transformed = options.getTransformContext().transform(copyMessages(), abortHandle);
-                    List<Message> llmMessages = options.getConvertToLlm().convert(transformed);
+                    // 发给 LLM 前统一修复：过滤 error/aborted 助手消息、补齐缺失的工具结果、按目标模型规整 toolCallId
+                    List<Message> llmMessages = MessageTransformer.transform(options.getConvertToLlm().convert(transformed), model);
                     Context context = new Context(systemPrompt, llmMessages, toToolDefs());
                     fire(new TurnStartEvent(context, turnIndex));
                     String apiKey = options.getGetApiKey().resolve(model.getProvider());

@@ -22,11 +22,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-final class SessionMessageCodec {
+/** 会话消息与 JSON 的编解码，供框架内与消费方复用。 */
+public final class SessionMessageCodec {
     private SessionMessageCodec() {
     }
 
-    static JsonObject encode(AgentMessage message) {
+    public static JsonObject encode(AgentMessage message) {
         if (!(message instanceof LlmAgentMessage)) {
             throw new IllegalArgumentException("Only LlmAgentMessage is supported for session persistence");
         }
@@ -76,7 +77,7 @@ final class SessionMessageCodec {
         return root;
     }
 
-    static AgentMessage decode(JsonObject json) {
+    public static AgentMessage decode(JsonObject json) {
         String kind = getString(json, "kind");
         if (!"llm".equals(kind)) {
             throw new IllegalArgumentException("Unsupported message kind: " + kind);
