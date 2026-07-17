@@ -8,6 +8,7 @@ import com.pi4j.ai.types.AssistantMessage;
 import com.pi4j.ai.types.ContentBlock;
 import com.pi4j.ai.types.Message;
 import com.pi4j.ai.types.Model;
+import com.pi4j.ai.types.ObservationMessage;
 import com.pi4j.ai.types.StopReason;
 import com.pi4j.ai.types.TextContent;
 import com.pi4j.ai.types.ThinkingContent;
@@ -121,6 +122,25 @@ class MessageTransformerTest {
         assertTrue(normalized.getContent().get(0) instanceof TextContent);
         assertTrue(normalized.getContent().get(1) instanceof ThinkingContent);
         assertFalse(((TextContent) normalized.getContent().get(0)).getText().trim().isEmpty());
+    }
+
+    @Test
+    void convertsObservationToLabelledProviderUserMessage() {
+        ObservationMessage observation = new ObservationMessage(
+                "pet-task",
+                Collections.<ContentBlock>singletonList(new TextContent("navigation completed")),
+                1234L);
+
+        List<Message> transformed = MessageTransformer.transform(
+                Collections.<Message>singletonList(observation),
+                model("deepseek-v4-flash", "openai-completions", "deepseek"));
+
+        assertEquals(1, transformed.size());
+        assertTrue(transformed.get(0) instanceof UserMessage);
+        UserMessage user = (UserMessage) transformed.get(0);
+        assertEquals(1234L, user.getTimestamp());
+        assertEquals("[Observation source=pet-task]", ((TextContent) user.getContent().get(0)).getText());
+        assertEquals("navigation completed", ((TextContent) user.getContent().get(1)).getText());
     }
 
     private Model model(String id, String api, String provider) {

@@ -9,6 +9,7 @@ import com.pi4j.ai.types.AssistantMessage;
 import com.pi4j.ai.types.ContentBlock;
 import com.pi4j.ai.types.ImageContent;
 import com.pi4j.ai.types.Message;
+import com.pi4j.ai.types.ObservationMessage;
 import com.pi4j.ai.types.StopReason;
 import com.pi4j.ai.types.TextContent;
 import com.pi4j.ai.types.ThinkingContent;
@@ -40,6 +41,10 @@ public final class SessionMessageCodec {
 
         if (llm instanceof UserMessage) {
             root.add("content", encodeContent(((UserMessage) llm).getContent()));
+        } else if (llm instanceof ObservationMessage) {
+            ObservationMessage observation = (ObservationMessage) llm;
+            root.addProperty("source", observation.getSource());
+            root.add("content", encodeContent(observation.getContent()));
         } else if (llm instanceof AssistantMessage) {
             AssistantMessage assistant = (AssistantMessage) llm;
             root.add("content", encodeContent(assistant.getContent()));
@@ -89,6 +94,13 @@ public final class SessionMessageCodec {
         if ("user".equals(role)) {
             UserMessage user = new UserMessage(decodeContent(json.getAsJsonArray("content")), timestamp);
             return new LlmAgentMessage(user);
+        }
+        if ("observation".equals(role)) {
+            ObservationMessage observation = new ObservationMessage(
+                    getString(json, "source"),
+                    decodeContent(json.getAsJsonArray("content")),
+                    timestamp);
+            return new LlmAgentMessage(observation);
         }
         if ("assistant".equals(role)) {
             AssistantMessage assistant = new AssistantMessage(

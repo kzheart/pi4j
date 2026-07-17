@@ -4,11 +4,13 @@ import com.pi4j.ai.types.AssistantMessage;
 import com.pi4j.ai.types.ContentBlock;
 import com.pi4j.ai.types.Message;
 import com.pi4j.ai.types.Model;
+import com.pi4j.ai.types.ObservationMessage;
 import com.pi4j.ai.types.StopReason;
 import com.pi4j.ai.types.TextContent;
 import com.pi4j.ai.types.ThinkingContent;
 import com.pi4j.ai.types.ToolCallContent;
 import com.pi4j.ai.types.ToolResultMessage;
+import com.pi4j.ai.types.UserMessage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -46,6 +48,10 @@ public final class MessageTransformer {
                 }
                 continue;
             }
+            if (message instanceof ObservationMessage) {
+                transformed.add(toProviderMessage((ObservationMessage) message));
+                continue;
+            }
             if (message instanceof AssistantMessage) {
                 AssistantMessage assistant = (AssistantMessage) message;
                 if (assistant.getStopReason() == StopReason.ERROR || assistant.getStopReason() == StopReason.ABORTED) {
@@ -58,6 +64,13 @@ public final class MessageTransformer {
         }
 
         return insertSyntheticToolResults(transformed);
+    }
+
+    private static UserMessage toProviderMessage(ObservationMessage observation) {
+        List<ContentBlock> content = new ArrayList<ContentBlock>();
+        content.add(new TextContent("[Observation source=" + observation.getSource() + "]"));
+        content.addAll(observation.getContent());
+        return new UserMessage(content, observation.getTimestamp());
     }
 
     private static AssistantMessage transformAssistant(
