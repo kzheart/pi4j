@@ -58,7 +58,7 @@ public final class ModelRegistry {
      * 按 spec 查找内置模型。spec 为 null、空白或未命中时返回 null。
      */
     public static Model find(String spec) {
-        if (spec == null || spec.isBlank()) {
+        if (spec == null || spec.trim().isEmpty()) {
             return null;
         }
         return INDEX.get(spec.trim().toLowerCase(Locale.ROOT));

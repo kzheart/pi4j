@@ -68,7 +68,7 @@ public class GoogleProvider extends AbstractHttpSseProvider {
             payload.add("generationConfig", generationConfig);
         }
 
-        RequestBody body = RequestBody.create(JsonUtil.gson().toJson(payload), JSON_MEDIA_TYPE);
+        RequestBody body = RequestBody.create(JSON_MEDIA_TYPE, JsonUtil.gson().toJson(payload));
 
         Request.Builder builder = new Request.Builder()
                 .url(url)

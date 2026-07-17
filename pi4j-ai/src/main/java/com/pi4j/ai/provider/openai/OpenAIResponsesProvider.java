@@ -106,7 +106,7 @@ public class OpenAIResponsesProvider extends AbstractHttpSseProvider {
         }
 
         byte[] payloadBytes = JsonUtil.gson().toJson(payload).getBytes(StandardCharsets.UTF_8);
-        RequestBody body = RequestBody.create(payloadBytes, JSON_MEDIA_TYPE);
+        RequestBody body = RequestBody.create(JSON_MEDIA_TYPE, payloadBytes);
 
         Request.Builder builder = new Request.Builder()
                 .url(url)

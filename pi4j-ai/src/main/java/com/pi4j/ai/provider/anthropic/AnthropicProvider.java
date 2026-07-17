@@ -101,7 +101,7 @@ public class AnthropicProvider extends AbstractHttpSseProvider {
         payload.add("messages", buildMessages(context.getMessages(), cacheControl));
         payload.add("tools", buildTools(context.getTools()));
 
-        RequestBody body = RequestBody.create(JsonUtil.gson().toJson(payload), JSON_MEDIA_TYPE);
+        RequestBody body = RequestBody.create(JSON_MEDIA_TYPE, JsonUtil.gson().toJson(payload));
 
         Request.Builder builder = new Request.Builder()
                 .url(url)
