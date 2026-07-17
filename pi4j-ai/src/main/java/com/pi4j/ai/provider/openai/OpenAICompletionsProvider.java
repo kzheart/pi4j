@@ -103,7 +103,7 @@ public class OpenAICompletionsProvider extends AbstractHttpSseProvider {
             } else if ("bailian".equals(compat.getThinkingFormat())) {
                 payload.addProperty("enable_thinking", true);
             } else {
-                payload.addProperty("reasoning_effort", options.getThinkingEffort());
+                payload.addProperty("reasoning_effort", normalizeReasoningEffort(options.getThinkingEffort()));
             }
         } else if ("bailian".equals(compat.getThinkingFormat())) {
             payload.addProperty("enable_thinking", false);
@@ -475,6 +475,10 @@ public class OpenAICompletionsProvider extends AbstractHttpSseProvider {
             return baseUrl.substring(0, baseUrl.length() - 1);
         }
         return baseUrl;
+    }
+
+    private String normalizeReasoningEffort(String effort) {
+        return "basic".equalsIgnoreCase(effort) ? "low" : effort;
     }
 
     private static final class ParseState {

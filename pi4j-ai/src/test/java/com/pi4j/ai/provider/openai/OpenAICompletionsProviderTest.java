@@ -95,6 +95,34 @@ class OpenAICompletionsProviderTest {
     }
 
     @Test
+    void buildRequestNormalizesLegacyBasicReasoningEffort() {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Model model = new Model(
+                "deepseek-v4-flash",
+                "DeepSeek V4 Flash",
+                "openai-completions",
+                "deepseek",
+                "https://api.deepseek.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                64000,
+                4096,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .thinkingEffort("basic")
+                .build());
+
+        assertEquals("low", readPayload(request).get("reasoning_effort").getAsString());
+    }
+
+    @Test
     void buildRequestIncludesResponseFormatWhenRequested() {
         OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
         Model model = new Model(
