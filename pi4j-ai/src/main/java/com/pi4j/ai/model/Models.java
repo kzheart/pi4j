@@ -85,6 +85,32 @@ public final class Models {
             4096,
             Collections.<String, String>emptyMap());
 
+    public static final Model DEEPSEEK_V4_FLASH = new Model(
+            "deepseek-v4-flash",
+            "DeepSeek V4 Flash",
+            ApiTypes.OPENAI_COMPLETIONS,
+            Providers.DEEPSEEK,
+            "https://api.deepseek.com",
+            true,
+            Arrays.asList("text"),
+            null,
+            1048576,
+            393216,
+            Collections.<String, String>emptyMap());
+
+    public static final Model DEEPSEEK_V4_PRO = new Model(
+            "deepseek-v4-pro",
+            "DeepSeek V4 Pro",
+            ApiTypes.OPENAI_COMPLETIONS,
+            Providers.DEEPSEEK,
+            "https://api.deepseek.com",
+            true,
+            Arrays.asList("text"),
+            null,
+            1048576,
+            393216,
+            Collections.<String, String>emptyMap());
+
     private Models() {
     }
 }

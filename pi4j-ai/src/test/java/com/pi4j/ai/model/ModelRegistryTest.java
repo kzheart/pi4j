@@ -33,6 +33,12 @@ class ModelRegistryTest {
     }
 
     @Test
+    void findsCurrentDeepSeekV4Models() {
+        assertEquals("deepseek-v4-flash", ModelRegistry.find("deepseek:deepseek-v4-flash").getId());
+        assertEquals("deepseek-v4-pro", ModelRegistry.find("deepseek-v4-pro").getId());
+    }
+
+    @Test
     void findReturnsNullForUnknownOrBlankSpec() {
         assertNull(ModelRegistry.find("unknown"));
         assertNull(ModelRegistry.find(null));
@@ -40,7 +46,7 @@ class ModelRegistryTest {
     }
 
     @Test
-    void allReturnsSevenBuiltInModels() {
-        assertEquals(7, ModelRegistry.all().size());
+    void allReturnsNineBuiltInModels() {
+        assertEquals(9, ModelRegistry.all().size());
     }
 }

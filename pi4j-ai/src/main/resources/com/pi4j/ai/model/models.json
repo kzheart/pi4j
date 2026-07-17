@@ -73,6 +73,30 @@
     "headers": {}
   },
   {
+    "id": "deepseek-v4-flash",
+    "name": "DeepSeek V4 Flash",
+    "api": "openai-completions",
+    "provider": "deepseek",
+    "baseUrl": "https://api.deepseek.com",
+    "reasoning": true,
+    "input": ["text"],
+    "contextWindow": 1048576,
+    "maxTokens": 393216,
+    "headers": {}
+  },
+  {
+    "id": "deepseek-v4-pro",
+    "name": "DeepSeek V4 Pro",
+    "api": "openai-completions",
+    "provider": "deepseek",
+    "baseUrl": "https://api.deepseek.com",
+    "reasoning": true,
+    "input": ["text"],
+    "contextWindow": 1048576,
+    "maxTokens": 393216,
+    "headers": {}
+  },
+  {
     "id": "MiniMax-M2.5",
     "name": "MiniMax M2.5 (Anthropic Compat)",
     "api": "anthropic-messages",
