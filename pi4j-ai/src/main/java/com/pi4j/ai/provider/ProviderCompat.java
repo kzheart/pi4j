@@ -40,7 +40,7 @@ public final class ProviderCompat {
                 isMistral,
                 isMistral,
                 isMistral,
-                isZai ? "zai" : isBailian ? "bailian" : "openai",
+                isZai ? "zai" : isBailian ? "bailian" : isDeepSeek ? "deepseek" : "openai",
                 responseFormatLevel);
     }
 

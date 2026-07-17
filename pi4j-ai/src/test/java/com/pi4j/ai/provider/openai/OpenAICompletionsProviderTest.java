@@ -120,6 +120,36 @@ class OpenAICompletionsProviderTest {
                 .build());
 
         assertEquals("low", readPayload(request).get("reasoning_effort").getAsString());
+        assertEquals("enabled", readPayload(request).getAsJsonObject("thinking").get("type").getAsString());
+    }
+
+    @Test
+    void buildRequestDisablesDeepSeekThinkingWhenEffortIsAbsent() {
+        OpenAICompletionsProvider provider = new OpenAICompletionsProvider(new OkHttpClient());
+        Model model = new Model(
+                "deepseek-v4-flash",
+                "DeepSeek V4 Flash",
+                "openai-completions",
+                "deepseek",
+                "https://api.deepseek.com",
+                false,
+                Arrays.asList("text"),
+                null,
+                1000000,
+                8192,
+                Collections.<String, String>emptyMap());
+        Context context = new Context(
+                null,
+                Collections.<Message>singletonList(new UserMessage(Collections.<ContentBlock>singletonList(new TextContent("hi")))),
+                Collections.emptyList());
+
+        Request request = provider.buildRequest(model, context, StreamOptions.builder()
+                .apiKey("sk-test")
+                .build());
+
+        JsonObject payload = readPayload(request);
+        assertEquals("disabled", payload.getAsJsonObject("thinking").get("type").getAsString());
+        assertFalse(payload.has("reasoning_effort"));
     }
 
     @Test

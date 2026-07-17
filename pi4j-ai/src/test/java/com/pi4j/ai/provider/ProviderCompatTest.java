@@ -43,6 +43,7 @@ class ProviderCompatTest {
         assertFalse(compat.isSupportsStore());
         assertFalse(compat.isSupportsDeveloperRole());
         assertTrue(compat.isSupportsReasoningEffort());
+        assertEquals("deepseek", compat.getThinkingFormat());
         assertTrue(ProviderCompat.isOpenAiCompatible("deepseek"));
     }
 

@@ -105,8 +105,19 @@ public class OpenAICompletionsProvider extends AbstractHttpSseProvider {
             } else {
                 payload.addProperty("reasoning_effort", normalizeReasoningEffort(options.getThinkingEffort()));
             }
-        } else if ("bailian".equals(compat.getThinkingFormat())) {
+        }
+        if ("bailian".equals(compat.getThinkingFormat())
+                && (options.getThinkingEffort() == null || options.getThinkingEffort().isEmpty())) {
             payload.addProperty("enable_thinking", false);
+        }
+        if ("deepseek".equals(compat.getThinkingFormat())) {
+            JsonObject thinking = new JsonObject();
+            thinking.addProperty(
+                    "type",
+                    options.getThinkingEffort() == null || options.getThinkingEffort().isEmpty()
+                            ? "disabled"
+                            : "enabled");
+            payload.add("thinking", thinking);
         }
         payload.add("messages", buildMessages(context.getSystemPrompt(), context.getMessages(), compat));
         if (!context.getTools().isEmpty()) {
